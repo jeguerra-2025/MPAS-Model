@@ -1929,6 +1929,8 @@ module atm_time_integration
       real (kind=RKIND), dimension(:,:), pointer :: pressure_p, rtheta_p, exner, tend_u
       real (kind=RKIND), dimension(:,:), pointer :: rho_pp, rtheta_pp, ru_p, rw_p, pv_edge, rho_edge
       real (kind=RKIND) :: theta_local, fac_m
+      ! New varaibles for implicit vertical dissipation of u
+      real (kind=RKIND), dimension(:,:), pointer :: idiag_u_lowr, idiag_u_main, idiag_u_uppr
 
 #ifndef MPAS_CAM_DYCORE
       ! Used in allocating scratch fields for physics tendencies
@@ -2254,7 +2256,8 @@ module atm_time_integration
                                           edgeThreadStart(thread), edgeThreadEnd(thread), &
                                           cellSolveThreadStart(thread), cellSolveThreadEnd(thread), &
                                           vertexSolveThreadStart(thread), vertexSolveThreadEnd(thread), &
-                                          edgeSolveThreadStart(thread), edgeSolveThreadEnd(thread))
+                                          edgeSolveThreadStart(thread), edgeSolveThreadEnd(thread), &
+                                          idiag_u_lowr, idiag_u_main, idiag_u_uppr)
             end do
 !$OMP END PARALLEL DO
 
@@ -2376,7 +2379,8 @@ module atm_time_integration
                                           edgeThreadStart(thread), edgeThreadEnd(thread), &
                                           cellSolveThreadStart(thread), cellSolveThreadEnd(thread), &
                                           vertexSolveThreadStart(thread), vertexSolveThreadEnd(thread), &
-                                          edgeSolveThreadStart(thread), edgeSolveThreadEnd(thread))
+                                          edgeSolveThreadStart(thread), edgeSolveThreadEnd(thread), &
+                                          idiag_u_lowr, idiag_u_main, idiag_u_uppr)
                end do
 !$OMP END PARALLEL DO
 
@@ -3644,7 +3648,8 @@ module atm_time_integration
 
    subroutine atm_advance_acoustic_step( state, diag, tend, mesh, configs, nCells, nVertLevels, dts, small_step, &
                                    cellStart, cellEnd, vertexStart, vertexEnd, edgeStart, edgeEnd, &
-                                   cellSolveStart, cellSolveEnd, vertexSolveStart, vertexSolveEnd, edgeSolveStart, edgeSolveEnd)
+                                   cellSolveStart, cellSolveEnd, vertexSolveStart, vertexSolveEnd, edgeSolveStart, edgeSolveEnd, &
+                                   idiag_u_lowr, idiag_u_main, idiag_u_uppr)
 
       !  This subroutine performs the entire acoustic step update, following Klemp et al MWR 2007,
       !  using forward-backward vertically implicit integration.
@@ -3694,6 +3699,8 @@ module atm_time_integration
       real (kind=RKIND), pointer :: cf1, cf2, cf3
 
       real (kind=RKIND), dimension(:), pointer :: etp, etm, ewp, ewm
+
+      real (kind=RKIND), dimension(:,:), pointer :: idiag_u_lowr, idiag_u_main, idiag_u_uppr
 
       integer, pointer :: nEdges, nCellsSolve
 
@@ -3774,7 +3781,8 @@ module atm_time_integration
                                    invAreaCell, cofrz, dvEdge, nEdgesOnCell, cellsOnEdge, edgesOnCell, edgesOnCell_sign, &
                                    dts, small_step, cf1, cf2, cf3, &
                                    etp, etm, ewp, ewm,    &
-                                   specZoneMaskEdge, specZoneMaskCell &
+                                   specZoneMaskEdge, specZoneMaskCell, &
+                                   idiag_u_lowr, idiag_u_main, idiag_u_uppr &
                                    )
 
    end subroutine atm_advance_acoustic_step
@@ -3788,7 +3796,8 @@ module atm_time_integration
                                    invAreaCell, cofrz, dvEdge, nEdgesOnCell, cellsOnEdge, edgesOnCell, edgesOnCell_sign, &
                                    dts, small_step, cf1, cf2, cf3, &
                                    etp, etm, ewp, ewm,    &
-                                   specZoneMaskEdge, specZoneMaskCell &
+                                   specZoneMaskEdge, specZoneMaskCell, &
+                                   idiag_u_lowr, idiag_u_main, idiag_u_uppr &
                                    )
 
       use mpas_atm_dimensions
@@ -3831,6 +3840,7 @@ module atm_time_integration
       real (kind=RKIND), dimension(nVertLevels+1,nCells+1) :: zgrid
       real (kind=RKIND), dimension(nVertLevels,nCells+1) :: cofwr
       real (kind=RKIND), dimension(nVertLevels,nCells+1) :: cofwz
+      real (kind=RKIND), dimension(nVertLevels,nEdges+1) :: idiag_u_lowr, idiag_u_main, idiag_u_uppr
 
       real (kind=RKIND), dimension(nVertLevels+1,nCells+1) :: w
       real (kind=RKIND), dimension(nVertLevels,nEdges+1) :: ru
@@ -3871,7 +3881,7 @@ module atm_time_integration
       integer :: cell1, cell2, iEdge, iCell, i, k
       real (kind=RKIND) :: c2, rcv, rtheta_pp_tmp
       real (kind=RKIND) :: pgrad, flux, rdts
-
+      real (kind=RKIND), dimension(nVertLevels) :: u_rhs
 
       rcv = rgas / (cp - rgas)
       c2 = cp * rcv
@@ -3906,8 +3916,15 @@ module atm_time_integration
                  pgrad = ((rtheta_pp(k,cell2)-rtheta_pp(k,cell1))*invDcEdge(iEdge) )/(.5*(zz(k,cell2)+zz(k,cell1)))
                  pgrad = cqu(k,iEdge)*0.5*c2*(exner(k,cell1)+exner(k,cell2))*pgrad
                  pgrad = pgrad + 0.5*zxu(k,iEdge)*gravity*(rho_pp(k,cell1)+rho_pp(k,cell2))
+                 ! Explicit update to rho-U 
                  ru_p(k,iEdge) = ru_p(k,iEdge) + dts*(tend_ru(k,iEdge) - (1.0_RKIND - specZoneMaskEdge(iEdge))*pgrad)
+                 u_rhs(k) = ru_p(k,iEdge)
               end do
+
+              ! Implicit vertical dissipation update to rho-U
+               call tridiag3(nVertLevels, idiag_u_lowr, &
+                             idiag_u_main, idiag_u_uppr, &
+                             u_rhs, iEdge, ru_p)
 
               ! accumulate ru_p for use later in scalar transport
 !DIR$ IVDEP
@@ -5787,7 +5804,8 @@ module atm_time_integration
 
    subroutine atm_compute_dyn_tend(tend, tend_physics, state, diag, mesh, diag_physics, configs, nVertLevels, rk_step, dynamics_substep, dt, &
                                    cellStart, cellEnd, vertexStart, vertexEnd, edgeStart, edgeEnd, &
-                                   cellSolveStart, cellSolveEnd, vertexSolveStart, vertexSolveEnd, edgeSolveStart, edgeSolveEnd)
+                                   cellSolveStart, cellSolveEnd, vertexSolveStart, vertexSolveEnd, edgeSolveStart, edgeSolveEnd, &
+                                   idiag_u_lowr, idiag_u_main, idiag_u_uppr)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
    ! Compute height and normal wind tendencies, as well as diagnostic variables
    !
@@ -5847,6 +5865,8 @@ module atm_time_integration
       real (kind=RKIND), dimension(:,:,:), pointer :: scalars, tend_scalars
 
       real (kind=RKIND), dimension(:,:), pointer :: tend_u_euler, tend_w_euler, tend_theta_euler
+      ! Declared as pointers to mimic tend_u_euler
+      real (kind=RKIND), dimension(:,:), pointer :: idiag_u_lowr, idiag_u_main, idiag_u_uppr
 
       real (kind=RKIND), dimension(:,:,:), pointer :: deriv_two
       integer, dimension(:,:), pointer :: cellsOnEdge, verticesOnEdge, edgesOnCell, edgesOnEdge, cellsOnCell, edgesOnVertex
@@ -6035,6 +6055,10 @@ module atm_time_integration
       call mpas_pool_get_array(tend, 'w_buoy', tend_w_buoy)
       call mpas_pool_get_array(tend, 'scalars_tend', tend_scalars)
 
+      ! Get new diagonals declared in the Registry so that data gets from pool here
+      call mpas_pool_get_array(tend, 'idiag_u_lowr', idiag_u_lowr)
+      call mpas_pool_get_array(tend, 'idiag_u_main', idiag_u_main)
+      call mpas_pool_get_array(tend, 'idiag_u_uppr', idiag_u_uppr)
 
       call mpas_pool_get_array(diag, 'cqw', cqw)
       call mpas_pool_get_array(diag, 'cqu', cqu)
@@ -6092,7 +6116,8 @@ module atm_time_integration
          config_surface_heat_flux, config_surface_moisture_flux, config_surface_drag_coefficient, &
          rthdynten, ustm, hfx, qfx, &
          cellStart, cellEnd, vertexStart, vertexEnd, edgeStart, edgeEnd, &
-         cellSolveStart, cellSolveEnd, vertexSolveStart, vertexSolveEnd, edgeSolveStart, edgeSolveEnd)
+         cellSolveStart, cellSolveEnd, vertexSolveStart, vertexSolveEnd, edgeSolveStart, edgeSolveEnd, &
+         idiag_u_lowr, idiag_u_main, idiag_u_uppr)
 
          if (nopbl) then
              deallocate(ustm)
@@ -6127,7 +6152,8 @@ module atm_time_integration
       config_surface_heat_flux, config_surface_moisture_flux, config_surface_drag_coefficient, &
       rthdynten, ustm, hfx, qfx, &
       cellStart, cellEnd, vertexStart, vertexEnd, edgeStart, edgeEnd, &
-      cellSolveStart, cellSolveEnd, vertexSolveStart, vertexSolveEnd, edgeSolveStart, edgeSolveEnd)
+      cellSolveStart, cellSolveEnd, vertexSolveStart, vertexSolveEnd, edgeSolveStart, edgeSolveEnd, &
+      idiag_u_lowr, idiag_u_main, idiag_u_uppr)
 
 
       use mpas_atm_dimensions
@@ -6199,6 +6225,10 @@ module atm_time_integration
       real (kind=RKIND), dimension(nVertLevels+1,nCells+1) :: tend_w_euler
       real (kind=RKIND), dimension(nVertLevels,nCells+1) :: tend_theta_euler
       real (kind=RKIND), dimension(15,2,nEdges+1) :: deriv_two
+      ! Tridiagonal column data for LES vertical dissipation of u
+      real (kind=RKIND), dimension(nVertLevels,nEdges+1) :: idiag_u_lowr
+      real (kind=RKIND), dimension(nVertLevels,nEdges+1) :: idiag_u_main
+      real (kind=RKIND), dimension(nVertLevels,nEdges+1) :: idiag_u_uppr
       integer, dimension(2,nEdges+1) :: cellsOnEdge
       integer, dimension(2,nEdges+1) :: verticesOnEdge
       integer, dimension(maxEdges,nCells+1) :: edgesOnCell
@@ -6595,7 +6625,8 @@ module atm_time_integration
                                  fzm, fzp, les_model_opt, les_surface_opt,                                    &
                                  config_surface_drag_coefficient,                                             &
                                  delsq_u, delsq_vorticity, delsq_divergence,                                  &
-                                 u, v, divergence, vorticity, rho_edge, rho_zz, u_init, v_init, ustm, tend_u_euler )
+                                 u, v, divergence, vorticity, rho_edge, rho_zz, u_init, v_init, ustm,         &
+                                 tend_u_euler, idiag_u_lowr, idiag_u_main, idiag_u_uppr                             )
 
 
       end if ! (rk_step 1 test for computing mixing terms)

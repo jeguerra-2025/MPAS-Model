@@ -587,7 +587,7 @@ contains
                                 config_surface_drag_coefficient,                                             &
                                 delsq_u, delsq_vorticity, delsq_divergence,                                  &
                                 u, v, divergence, vorticity, rho_edge, rho_zz, u_init, v_init, ustm,         &
-                                tend_u_euler                                                                )
+                                tend_u_euler, idiag_lowr, idiag_main, idiag_uppr                             )
 
       use mpas_atm_dimensions  !  pull nVertLevels and maxEdges from here
 
@@ -650,6 +650,10 @@ contains
       real (kind=RKIND), dimension(:), intent(in) :: ustm
 
       real (kind=RKIND), dimension(nVertLevels,nEdges+1), intent(out) :: tend_u_euler
+      ! Insert column variables for implicit tridiagonal system (3 column arrays)
+      real (kind=RKIND), dimension(nVertLevels,nEdges+1), intent(out) :: idiag_lowr
+      real (kind=RKIND), dimension(nVertLevels,nEdges+1), intent(out) :: idiag_main
+      real (kind=RKIND), dimension(nVertLevels,nEdges+1), intent(out) :: idiag_uppr
 
       ! local variables
 
@@ -835,9 +839,14 @@ contains
                   z0 = 0.5*(z2+z3)
                   zp = 0.5*(z3+z4)
 
-                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
-                                     (u(k+1,iEdge)-u(k  ,iEdge))/(zp-z0)                      &
-                                    -(u(k  ,iEdge)-u(k-1,iEdge))/(z0-zm) )/(0.5*(zp-zm))
+                  ! Tendency update commented out
+                  !tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
+                  !                   (u(k+1,iEdge)-u(k  ,iEdge))/(zp-z0)                      &
+                  !                  -(u(k  ,iEdge)-u(k-1,iEdge))/(z0-zm) )/(0.5*(zp-zm))
+                  ! Lower, main, and upper diagonals of 1D column Laplacian
+                  idiag_lowr(k,iEdge) = +rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm)
+                  idiag_main(k,iEdge) = -rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm))
+                  idiag_uppr(k,iEdge) = +rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0)
                end do
             end do
 
@@ -1635,5 +1644,44 @@ contains
 !     moisture_flux = max(0., 0.15*sin(pii*rel_time_q_flux))/1000.
 
 !  end subroutine flux_les_sas
+
+   subroutine tridiag3(kte,ld,md,ud,d,iEdge,x)
+
+   !ccccccccccccccccccccccccccccccc                                                                   
+   ! Aim: Inversion and resolution of a tridiagonal matrix                                            
+   !          A X = D                                                                                 
+   ! Input:                                                                                           
+   !  ld(*) lower diagonal (Ai,i-1)                                                                  
+   !  md(*) principal diagonal (Ai,i)                                                                
+   !  ud(*) upper diagonal (Ai,i+1)                                                                  
+   !  d     
+   !  iEdge edge index from calling routine                                                                                           
+   ! Output                                                                                           
+   !  x     results                                                                                   
+   !ccccccccccccccccccccccccccccccc                                                                   
+
+      implicit none
+      integer,intent(in)   :: kte
+      integer,intent(in)   :: iEdge
+      integer, parameter   :: kts=1
+      real(kind=RKIND), dimension(kte) :: ld,md,ud,d
+      real(kind=RKIND), dimension(:,:), intent(out) :: x
+      integer :: k
+
+      do k=kte-1,kts,-1
+         d(k)=d(k)-ud(k)*d(k+1)/md(k+1)
+         md(k)=md(k)-ud(k)*ld(k+1)/md(k+1)
+      enddo
+
+      do k=kts+1,kte
+         d(k)=d(k)-ld(k)*d(k-1)/md(k-1)
+      enddo
+
+      do k=kts,kte
+         x(k,iEdge)=d(k)/md(k)
+      enddo
+
+      DEBUG_WRITE(' exiting tridiagonal solver for vertical dissipation ')
+   end subroutine tridiag3
 
 end module mpas_atm_dissipation_models
