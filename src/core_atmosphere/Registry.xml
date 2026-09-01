@@ -2024,14 +2024,6 @@
 
         <var_struct name="tend" time_levs="1">
 
-               <!-- new tendency-like variables for vertically implicit solver -->
-               <var name="idiag_u_lowr" name_in_code="du_lowr" type="real" dimensions="nVertLevels nEdges" units="m^{-2}"
-                     description="Lower diagonal vertical Laplacian of u from dynamics"/>
-               <var name="idiag_u_main" name_in_code="du_main" type="real" dimensions="nVertLevels nEdges" units="m^{-2}"
-                     description="Main diagonal vertical Laplacian of u from dynamics"/>
-               <var name="idiag_u_uppr" name_in_code="du_uppr" type="real" dimensions="nVertLevels nEdges" units="m^{-2}"
-                     description="Upper diagonal vertical Laplacian of u from dynamics"/>
-
                 
                 <!-- tendencies for prognostic variables -->
                 <var name="tend_u" name_in_code="u" type="real" dimensions="nVertLevels nEdges Time" units="m s^{-2}"
