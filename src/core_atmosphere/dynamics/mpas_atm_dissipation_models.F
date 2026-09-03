@@ -587,7 +587,7 @@ contains
                                 config_surface_drag_coefficient,                                             &
                                 delsq_u, delsq_vorticity, delsq_divergence,                                  &
                                 u, v, divergence, vorticity, rho_edge, rho_zz, u_init, v_init, ustm,         &
-                                tend_u_euler                                                                )
+                                dt, tend_u_euler                                                                )
 
       use mpas_atm_dimensions  !  pull nVertLevels and maxEdges from here
 
@@ -666,6 +666,12 @@ contains
       real (kind=RKIND) :: velocity_magnitude
       real (kind=RKIND) :: tau_12_factor
 
+      ! Insert column variables for implicit tridiagonal system (3 column arrays)
+      real (kind=RKIND), intent(in) :: dt
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_lowr
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_main
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_uppr
+      real (kind=RKIND), dimension(nVertLevels) :: qe_new ! locally updated generic edge quantity per column
 
       DEBUG_WRITE(' begin u_dissipation_3d ')
       DEBUG_WRITE(' 4th order hyperviscosity is $r ' COMMA realArgs=(/h_mom_eddy_visc4/))
@@ -835,10 +841,26 @@ contains
                   z0 = 0.5*(z2+z3)
                   zp = 0.5*(z3+z4)
 
-                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
-                                     (u(k+1,iEdge)-u(k  ,iEdge))/(zp-z0)                      &
-                                    -(u(k  ,iEdge)-u(k-1,iEdge))/(z0-zm) )/(0.5*(zp-zm))
+                  !tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
+                  !                   (u(k+1,iEdge)-u(k  ,iEdge))/(zp-z0)                      &
+                  !                  -(u(k  ,iEdge)-u(k-1,iEdge))/(z0-zm) )/(0.5*(zp-zm))
+
+                  ! Lower, main, and upper diagonals of 1D column Laplacian
+                  idiag_lowr(k) = +dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm)
+                  idiag_main(k) = -dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm))
+                  idiag_uppr(k) = +dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0)
                end do
+
+               ! Execute the solver for this column to get local updated state qe_new
+               call tridiag3(nVertLevels, idiag_lowr, &
+                             idiag_main, idiag_uppr, &
+                             u(:,iEdge), qe_new)
+
+               ! Update the total tendency
+               do k=2,nVertLevels-1
+                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + (qe_new(k) - u(k,iEdge)) / dt
+               end do
+
             end do
 
             !$acc end parallel
@@ -871,10 +893,26 @@ contains
                   z0 = 0.5*(z2+z3)
                   zp = 0.5*(z3+z4)
 
-                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
-                                     (u_mix(k+1)-u_mix(k  ))/(zp-z0)                      &
-                                    -(u_mix(k  )-u_mix(k-1))/(z0-zm) )/(0.5*(zp-zm))
+                  !tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
+                  !                   (u_mix(k+1)-u_mix(k  ))/(zp-z0)                      &
+                  !                  -(u_mix(k  )-u_mix(k-1))/(z0-zm) )/(0.5*(zp-zm))
+
+                  ! Lower, main, and upper diagonals of 1D column Laplacian
+                  idiag_lowr(k) = +dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm)
+                  idiag_main(k) = -dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm))
+                  idiag_uppr(k) = +dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0)
                end do
+
+               ! Execute the solver for this column to get local updated state qe_new
+               call tridiag3(nVertLevels, idiag_lowr, &
+                             idiag_main, idiag_uppr, &
+                             u_mix, qe_new)
+
+               ! Update the total tendency
+               do k=2,nVertLevels-1
+                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + (qe_new(k) - u_mix(k)) / dt
+               end do
+
             end do
 
             !$acc end parallel
@@ -957,7 +995,7 @@ contains
                                 w, rho_edge, rho_zz, divergence, zz,                      &
                                 eddy_visc_horz, eddy_visc_vert,                           &
                                 les_model_opt, les_surface_opt,                           &
-                                tend_w_euler                                             )
+                                dt, tend_w_euler                                             )
 
 
       ! 3D w dissipation using the 3D smagorinsky eddy viscosities.
@@ -1010,6 +1048,12 @@ contains
       integer :: cell1, cell2, iEdge, iCell, i, k
       real (kind=RKIND) :: r_areaCell, edge_sign, w_turb_flux
 
+      ! Insert column variables for implicit tridiagonal system (3 column arrays)
+      real (kind=RKIND), intent(in) :: dt
+      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_lowr
+      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_main
+      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_uppr
+      real (kind=RKIND), dimension(nVertLevels+1) :: qc_new ! locally updated generic center quantity per column
 
 !  !OMP BARRIER  why is this openmp barrier here???
 
@@ -1106,9 +1150,27 @@ contains
 !DIR$ IVDEP
             !$acc loop vector
             do k=2,nVertLevels
-               tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + v_mom_eddy_visc2*0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell))*(  &
-                                           (w(k+1,iCell)-w(k  ,iCell))*rdzw(k)                              &
-                                          -(w(k  ,iCell)-w(k-1,iCell))*rdzw(k-1) )*rdzu(k)
+               
+               !tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + v_mom_eddy_visc2*0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell))*(  &
+               !                            (w(k+1,iCell)-w(k  ,iCell))*rdzw(k)                              &
+               !                           -(w(k  ,iCell)-w(k-1,iCell))*rdzw(k-1) )*rdzu(k)
+            ! Lower, main, and upper diagonals of 1D column Laplacian
+               idiag_lowr(k) = +dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
+                              v_mom_eddy_visc2 * rdzw(k-1)
+               idiag_main(k) = -dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
+                              v_mom_eddy_visc2 * (rdzw(k) + rdzw(k-1))
+               idiag_uppr(k) = +dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
+                              v_mom_eddy_visc2 * rdzw(k)
+            end do
+
+            ! Execute the solver for this column to get local updated state qe_new
+            call tridiag3(nVertLevels+1, idiag_lowr, &
+                           idiag_main, idiag_uppr, &
+                           w(:,iCell), qc_new)
+
+            ! Update the total tendency
+            do k=2,nVertLevels
+               tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + (qc_new(k) - w(k,iCell)) / dt
             end do
          end do
 
@@ -1603,6 +1665,44 @@ contains
 
    end subroutine scalar_dissipation_3d_les
 
+   subroutine tridiag3(kte,ld,md,ud,rhs,x)
+
+      !ccccccccccccccccccccccccccccccc                                                                   
+      ! Aim: Inversion and resolution of a tridiagonal matrix                                            
+      !          A X = D                                                                                 
+      ! Input:                                                                                           
+      !  ld(*) lower diagonal (Ai,i-1)                                                                  
+      !  md(*) principal diagonal (Ai,i)                                                                
+      !  ud(*) upper diagonal (Ai,i+1)                                                                  
+      !  d     
+      !  iEdge edge index from calling routine                                                                                           
+      ! Output                                                                                           
+      !  x     results                                                                                   
+      !ccccccccccccccccccccccccccccccc                                                                   
+
+      implicit none
+      integer,intent(in)   :: kte
+      integer, parameter   :: kts=1
+      real(kind=RKIND), dimension(kte) :: rhs
+      real(kind=RKIND), dimension(kte) :: ld,md,ud
+      real(kind=RKIND), dimension(kte), intent(out) :: x
+      integer :: k
+
+      do k=kte-1,kts,-1
+         rhs(k)=rhs(k)-ud(k)*rhs(k+1)/md(k+1)
+         md(k)=md(k)-ud(k)*ld(k+1)/md(k+1)
+      enddo
+
+      do k=kts+1,kte
+         rhs(k)=rhs(k)-ld(k)*rhs(k-1)/md(k-1)
+      enddo
+
+      do k=kts,kte
+         x(k)=rhs(k)/md(k)
+      enddo
+
+      DEBUG_WRITE(' exiting tridiagonal solver for vertical dissipation ')
+   end subroutine tridiag3
 !-----------
 
 !  subroutine flux_les_sas(heat_flux, moisture_flux, clock, dt)
