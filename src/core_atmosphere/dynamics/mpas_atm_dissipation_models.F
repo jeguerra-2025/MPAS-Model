@@ -653,7 +653,7 @@ contains
 
       ! local variables
 
-      integer :: iEdge, cell1, cell2, vertex1, vertex2, iVertex, iCell, i, k
+      integer :: iEdge, cell1, cell2, vertex1, vertex2, iVertex, iCell, i, k, kdiag
       real (kind=RKIND) :: r_dc, r_dv, u_diffusion, u_diffusion_les, kdiffu, r, edge_sign, u_mix_scale
       real (kind=RKIND) :: z1, z2, z3, z4, zm, z0, zp
       real (kind=RKIND), dimension(nVertLevels) :: u_mix
@@ -668,10 +668,10 @@ contains
 
       ! Insert column variables for implicit tridiagonal system (3 column arrays)
       real (kind=RKIND), intent(in) :: dt
-      real (kind=RKIND), dimension(nVertLevels) :: idiag_lowr
-      real (kind=RKIND), dimension(nVertLevels) :: idiag_main
-      real (kind=RKIND), dimension(nVertLevels) :: idiag_uppr
-      real (kind=RKIND), dimension(nVertLevels) :: qe_new ! locally updated generic edge quantity per column
+      real (kind=RKIND), dimension(nVertLevels-2) :: idiag_lowr
+      real (kind=RKIND), dimension(nVertLevels-2) :: idiag_main
+      real (kind=RKIND), dimension(nVertLevels-2) :: idiag_uppr
+      real (kind=RKIND), dimension(nVertLevels-2) :: qe_new ! locally updated generic edge quantity per column
 
       DEBUG_WRITE(' begin u_dissipation_3d ')
       DEBUG_WRITE(' 4th order hyperviscosity is $r ' COMMA realArgs=(/h_mom_eddy_visc4/))
@@ -830,6 +830,7 @@ contains
                cell2 = cellsOnEdge(2,iEdge)
 
                !$acc loop vector
+               kdiag = 1
                do k=2,nVertLevels-1
 
                   z1 = 0.5*(zgrid(k-1,cell1)+zgrid(k-1,cell2))
@@ -846,19 +847,25 @@ contains
                   !                  -(u(k  ,iEdge)-u(k-1,iEdge))/(z0-zm) )/(0.5*(zp-zm))
 
                   ! Lower, main, and upper diagonals of 1D column Laplacian
-                  idiag_lowr(k) = +dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm)
-                  idiag_main(k) = -dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm))
-                  idiag_uppr(k) = +dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0)
+                  idiag_lowr(kdiag) = 1.0_RKIND - dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm) / &
+                                                                              (0.5*(zp-zm))
+                  idiag_main(kdiag) = 1.0_RKIND + dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm)) / &
+                                                                              (0.5*(zp-zm))
+                  idiag_uppr(kdiag) = 1.0_RKIND - dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0) / &
+                                                                              (0.5*(zp-zm))
+                  kdiag = kdiag + 1
                end do
 
                ! Execute the solver for this column to get local updated state qe_new
-               call tridiag3(nVertLevels, idiag_lowr, &
+               call tridiag3(nVertLevels-2, idiag_lowr, &
                              idiag_main, idiag_uppr, &
-                             u(:,iEdge), qe_new)
+                             u(2:nVertLevels-1,iEdge), qe_new)
 
-               ! Update the total tendency
+               ! Update the total tendency with the implicitly derived partial solution
+               kdiag = 1
                do k=2,nVertLevels-1
-                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + (qe_new(k) - u(k,iEdge)) / dt
+                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + (qe_new(kdiag) - u(k,iEdge)) / dt
+                  kdiag = kdiag + 1
                end do
 
             end do
@@ -882,6 +889,7 @@ contains
                end do
 
                !$acc loop vector
+               kdiag = 1
                do k=2,nVertLevels-1
 
                   z1 = 0.5*(zgrid(k-1,cell1)+zgrid(k-1,cell2))
@@ -898,13 +906,17 @@ contains
                   !                  -(u_mix(k  )-u_mix(k-1))/(z0-zm) )/(0.5*(zp-zm))
 
                   ! Lower, main, and upper diagonals of 1D column Laplacian
-                  idiag_lowr(k) = +dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm)
-                  idiag_main(k) = -dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm))
-                  idiag_uppr(k) = +dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0)
+                  idiag_lowr(kdiag) = 1.0_RKIND - dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm) / &
+                                                                              (0.5*(zp-zm))
+                  idiag_main(kdiag) = 1.0_RKIND + dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm)) / &
+                                                                              (0.5*(zp-zm))
+                  idiag_uppr(kdiag) = 1.0_RKIND - dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0) / &
+                                                                              (0.5*(zp-zm))
+                  kdiag = kdiag + 1
                end do
 
                ! Execute the solver for this column to get local updated state qe_new
-               call tridiag3(nVertLevels, idiag_lowr, &
+               call tridiag3(nVertLevels-1, idiag_lowr, &
                              idiag_main, idiag_uppr, &
                              u_mix, qe_new)
 
@@ -1045,15 +1057,15 @@ contains
 
       ! local variables
 
-      integer :: cell1, cell2, iEdge, iCell, i, k
+      integer :: cell1, cell2, iEdge, iCell, i, k, kdiag
       real (kind=RKIND) :: r_areaCell, edge_sign, w_turb_flux
 
       ! Insert column variables for implicit tridiagonal system (3 column arrays)
       real (kind=RKIND), intent(in) :: dt
-      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_lowr
-      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_main
-      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_uppr
-      real (kind=RKIND), dimension(nVertLevels+1) :: qc_new ! locally updated generic center quantity per column
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_lowr
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_main
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_uppr
+      real (kind=RKIND), dimension(nVertLevels) :: qc_new ! locally updated generic center quantity per column
 
 !  !OMP BARRIER  why is this openmp barrier here???
 
@@ -1149,28 +1161,32 @@ contains
          do iCell=cellSolveStart,cellSolveEnd
 !DIR$ IVDEP
             !$acc loop vector
+            kdiag = 1
             do k=2,nVertLevels
                
                !tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + v_mom_eddy_visc2*0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell))*(  &
                !                            (w(k+1,iCell)-w(k  ,iCell))*rdzw(k)                              &
                !                           -(w(k  ,iCell)-w(k-1,iCell))*rdzw(k-1) )*rdzu(k)
-            ! Lower, main, and upper diagonals of 1D column Laplacian
-               idiag_lowr(k) = +dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
-                              v_mom_eddy_visc2 * rdzw(k-1)
-               idiag_main(k) = -dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
-                              v_mom_eddy_visc2 * (rdzw(k) + rdzw(k-1))
-               idiag_uppr(k) = +dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
-                              v_mom_eddy_visc2 * rdzw(k)
+               ! Lower, main, and upper diagonals of 1D column Laplacian
+               idiag_lowr(kdiag) = 1.0_RKIND - dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
+                              v_mom_eddy_visc2 * rdzw(k-1) * rdzu(k)
+               idiag_main(kdiag) = 1.0_RKIND + dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
+                              v_mom_eddy_visc2 * (rdzw(k) + rdzw(k-1)) * rdzu(k)
+               idiag_uppr(kdiag) = 1.0_RKIND - dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
+                              v_mom_eddy_visc2 * rdzw(k) * rdzu(k)
+               kdiag = kdiag + 1
             end do
 
             ! Execute the solver for this column to get local updated state qe_new
-            call tridiag3(nVertLevels+1, idiag_lowr, &
-                           idiag_main, idiag_uppr, &
-                           w(:,iCell), qc_new)
+            call tridiag3(nVertLevels, idiag_lowr, &
+                        idiag_main, idiag_uppr, &
+                        w(2:,iCell), qc_new)
 
             ! Update the total tendency
+            kdiag = 1
             do k=2,nVertLevels
-               tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + (qc_new(k) - w(k,iCell)) / dt
+               tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + (qc_new(kdiag) - w(k,iCell)) / dt
+               kdiag = kdiag + 1
             end do
          end do
 
@@ -1303,9 +1319,10 @@ contains
       real (kind=RKIND), dimension(nVertLevels,nCells+1) :: delsq_theta
 
       ! local variables
-      integer :: cell1, cell2, iEdge, iCell, i, k, iScalar
+      integer :: cell1, cell2, iEdge, iCell, i, k, iScalar, kdiag
       real (kind=RKIND) :: r_areaCell, edge_sign, theta_turb_flux, pr_scale
       real (kind=RKIND) :: z1, z2, z3, z4, zm, z0, zp
+      real (kind=RKIND), dimension(nVertLevels) :: t_mix
       real (kind=RKIND), dimension(nVertLevels+1) :: turb_vflux, prandtl_1d_inverse
       real (kind=RKIND), dimension(num_scalars,nVertLevels+1) :: turb_vflux_scalars
       real (kind=RKIND), dimension(nVertLevels) :: rho_k_at_w, zz_at_w
@@ -1313,6 +1330,11 @@ contains
       real (kind=RKIND) :: moisture_flux, heat_flux, theta_m_flux
       real (kind=RKIND) :: qv_cell, theta_m_cell, theta_cell
 
+      ! Insert column variables for implicit tridiagonal system (3 column arrays)
+      real (kind=RKIND), dimension(nVertLevels-1) :: idiag_lowr
+      real (kind=RKIND), dimension(nVertLevels-1) :: idiag_main
+      real (kind=RKIND), dimension(nVertLevels-1) :: idiag_uppr
+      real (kind=RKIND), dimension(nVertLevels-1) :: qc_new ! locally updated generic center quantity per column
 
       DEBUG_WRITE(' begin scalar_dissipation_3d ')
       DEBUG_WRITE(' 4th order hyperviscosity is $r ' COMMA realArgs=(/h_theta_eddy_visc4/))
@@ -1481,6 +1503,7 @@ contains
             do iCell = cellSolveStart,cellSolveEnd
 
                !$acc loop vector
+               kdiag = 1
                do k=2,nVertLevels-1
                   z1 = zgrid(k-1,iCell)
                   z2 = zgrid(k  ,iCell)
@@ -1491,9 +1514,29 @@ contains
                   z0 = 0.5*(z2+z3)
                   zp = 0.5*(z3+z4)
 
-                  tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + v_theta_eddy_visc2*prandtl_inv*rho_zz(k,iCell)*(&
-                                           (theta_m(k+1,iCell)-theta_m(k  ,iCell))/(zp-z0)                 &
-                                          -(theta_m(k  ,iCell)-theta_m(k-1,iCell))/(z0-zm) )/(0.5*(zp-zm))
+                  !tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + v_theta_eddy_visc2*prandtl_inv*rho_zz(k,iCell)*(&
+                  !                         (theta_m(k+1,iCell)-theta_m(k  ,iCell))/(zp-z0)                 &
+                  !                        -(theta_m(k  ,iCell)-theta_m(k-1,iCell))/(z0-zm) )/(0.5*(zp-zm))
+
+                  ! Lower, main, and upper diagonals of 1D column Laplacian
+                  idiag_lowr(kdiag) = 1.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (z0-zm) / &
+                                                                              (0.5*(zp-zm))
+                  idiag_main(kdiag) = 1.0_RKIND + dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm)) / &
+                                                                              (0.5*(zp-zm))
+                  idiag_uppr(kdiag) = 1.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (zp-z0) / &
+                                                                              (0.5*(zp-zm))
+                  kdiag = kdiag + 1
+               end do
+               ! Execute the solver for this column to get local updated state qe_new
+               call tridiag3(nVertLevels-2, idiag_lowr, &
+                             idiag_main, idiag_uppr, &
+                             theta_m(2:nVertLevels-1,iCell), qc_new)
+
+               ! Update the total tendency
+               kdiag = 1
+               do k=2,nVertLevels-1
+                  tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + (qc_new(kdiag) - theta_m(k,iCell)) / dt
+                  kdiag = kdiag + 1
                end do
             end do
 
@@ -1507,6 +1550,12 @@ contains
             do iCell = cellSolveStart,cellSolveEnd
 
                !$acc loop vector
+               do k=1,nVertLevels
+                  t_mix(k) = theta_m(k,iCell)-t_init(k,iCell)
+               end do
+
+               !$acc loop vector
+               kdiag = 1
                do k=2,nVertLevels-1
                   z1 = zgrid(k-1,iCell)
                   z2 = zgrid(k  ,iCell)
@@ -1517,9 +1566,33 @@ contains
                   z0 = 0.5*(z2+z3)
                   zp = 0.5*(z3+z4)
 
-                  tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + v_theta_eddy_visc2*prandtl_inv*rho_zz(k,iCell)*(&
-                                           ((theta_m(k+1,iCell)-t_init(k+1,iCell))-(theta_m(k  ,iCell)-t_init(k,iCell)))/(zp-z0)      &
-                                          -((theta_m(k  ,iCell)-t_init(k,iCell))-(theta_m(k-1,iCell)-t_init(k-1,iCell)))/(z0-zm) )/(0.5*(zp-zm))
+                  !tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + v_theta_eddy_visc2*prandtl_inv*rho_zz(k,iCell)*(&
+                  !                         ((theta_m(k+1,iCell)-t_init(k+1,iCell))-(theta_m(k  ,iCell)-t_init(k,iCell)))/(zp-z0)      &
+                  !                        -((theta_m(k  ,iCell)-t_init(k,iCell))-(theta_m(k-1,iCell)-t_init(k-1,iCell)))/(z0-zm) )/(0.5*(zp-zm))
+                  ! This version is explicit in the new variable t_mix (just to make the computation more readable)
+                  !tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + v_theta_eddy_visc2*prandtl_inv*rho_zz(k,iCell)*(&
+                  !                         (t_mix(k+1)-t_mix(k))/(zp-z0)      &
+                  !                        -(t_mix(k)-t_mix(k-1))/(z0-zm) )/(0.5*(zp-zm))
+                  ! Lower, main, and upper diagonals of 1D column Laplacian
+                  idiag_lowr(kdiag) = 1.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (z0-zm) / &
+                                                                              (0.5*(zp-zm))
+                  idiag_main(kdiag) = 1.0_RKIND + dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm)) / &
+                                                                              (0.5*(zp-zm))
+                  idiag_uppr(kdiag) = 1.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (zp-z0) / &
+                                                                              (0.5*(zp-zm))
+                  kdiag = kdiag + 1
+               end do
+
+               ! Execute the solver for this column to get local updated state qe_new
+               call tridiag3(nVertLevels-2, idiag_lowr, &
+                             idiag_main, idiag_uppr, &
+                             t_mix(2:nVertLevels-1), qc_new)
+
+               ! Update the total tendency
+               kdiag = 1
+               do k=2,nVertLevels-1
+                  tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + (qc_new(kdiag) - t_mix(k)) / dt
+                  kdiag = kdiag + 1
                end do
             end do
 
