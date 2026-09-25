@@ -1650,7 +1650,7 @@ contains
                rho_k_at_w(k) =  fzm(k)*rho_zz(k  ,iCell)*zz(k  ,iCell)*zz(k  ,iCell)*eddy_visc_vert(k  ,iCell) &
                              +fzp(k)*rho_zz(k-1,iCell)*zz(k-1,iCell)*zz(k-1,iCell)*eddy_visc_vert(k-1,iCell)
                zz_at_w(k) = fzm(k)*zz(k,iCell)+fzp(k)*zz(k-1,iCell)
-               turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)*(theta_m(k,iCell)-theta_m(k-1,iCell))
+               turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) !*(theta_m(k,iCell)-theta_m(k-1,iCell))
             end do
 
             ! test boundary conditions for supercell and les test cases
@@ -1680,16 +1680,45 @@ contains
 
             else
 
-               turb_vflux(1) = turb_vflux(2)
-               turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
+               turb_vflux(1) = turb_vflux(2) * (theta_m(2,iCell)-theta_m(1,iCell))
+               turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels) * & 
+                                          (theta_m(nVertLevels,iCell)-theta_m(nVertLevels-1,iCell))
 
             end if
 
             !$acc loop vector
-            do k=1,nVertLevels
-               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) &
-                                           - rdzw(k)*(turb_vflux(k+1)-turb_vflux(k))
+            kdiag = 1
+            do k=2,nVertLevels-1
+               ! Lower, main, and upper diagonals of 1D column Laplacian
+               idiag_lowr(kdiag) = 1.0_RKIND - dt * turb_vflux(k-1) * rdzw(k)
+               idiag_main(kdiag) = 1.0_RKIND + dt * (turb_vflux(k+1) + turb_vflux(k)) * rdzw(k)
+               idiag_uppr(kdiag) = 1.0_RKIND - dt * turb_vflux(k+1) * rdzw(k)
+               kdiag = kdiag + 1
             end do
+
+            ! Execute the solver for this column to get local updated state qe_new
+            call tridiag3(nVertLevels-2, idiag_lowr, &
+                           idiag_main, idiag_uppr, &
+                           theta_m(2:nVertLevels-1,iCell), qc_new)
+
+            ! Update tendency on interior cells
+            kdiag = 1
+            do k=2,nVertLevels-1
+               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + (qc_new(kdiag) - theta_m(k,iCell)) / dt
+               kdiag = kdiag + 1
+            end do
+            
+            ! Update tendency on boundary cells
+            tend_theta_euler(1,iCell) = tend_theta_euler(1,iCell) &
+                                          - rdzw(k)*(turb_vflux(2)-turb_vflux(1))
+            tend_theta_euler(nVertLevels,iCell) = tend_theta_euler(nVertLevels,iCell) &
+                                          - rdzw(k)*(turb_vflux(nVertLevels+1)-turb_vflux(nVertLevels))
+
+            !$acc loop vector
+            !do k=1,nVertLevels
+            !   tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) &
+            !                               - rdzw(k)*(turb_vflux(k+1)-turb_vflux(k))
+            !end do
 
             if (mix_scalars ) then
 
