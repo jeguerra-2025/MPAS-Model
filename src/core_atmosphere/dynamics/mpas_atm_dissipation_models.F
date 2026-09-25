@@ -1676,7 +1676,8 @@ contains
                theta_m_flux = heat_flux*(1.0+(rv/rgas)*qv_cell)+(rv/rgas)*theta_cell*moisture_flux
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                moisture_flux = moisture_flux*rho_zz(1,iCell)
-               turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
+               turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels) * & 
+                                          (theta_m(nVertLevels,iCell)-theta_m(nVertLevels-1,iCell))
 
             else
 
