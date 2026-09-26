@@ -1705,15 +1705,15 @@ contains
             ! Update tendency on interior cells
             kdiag = 1
             do k=2,nVertLevels-1
-               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + (qc_new(kdiag) - theta_m(k,iCell)) / dt
+               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + 0.0 !(qc_new(kdiag) - theta_m(k,iCell)) / dt
                kdiag = kdiag + 1
             end do
             
             ! Update tendency on boundary cells
             tend_theta_euler(1,iCell) = tend_theta_euler(1,iCell) &
-                                          - rdzw(k)*(turb_vflux(2)-turb_vflux(1))
+                                          - rdzw(1)*(turb_vflux(2)-turb_vflux(1))
             tend_theta_euler(nVertLevels,iCell) = tend_theta_euler(nVertLevels,iCell) &
-                                          - rdzw(k)*(turb_vflux(nVertLevels+1)-turb_vflux(nVertLevels))
+                                          - rdzw(nVertLevels)*(turb_vflux(nVertLevels+1)-turb_vflux(nVertLevels))
 
             !$acc loop vector
             !do k=1,nVertLevels
