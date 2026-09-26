@@ -2248,7 +2248,7 @@ module atm_time_integration
 !$OMP PARALLEL DO
             do thread=1,nThreads
                call atm_compute_dyn_tend( tend, tend_physics, state, diag, mesh, diag_physics, &
-                                          block % configs, nVertLevels, rk_step, dynamics_substep, rk_timestep(1), & 
+                                          block % configs, nVertLevels, rk_step, dynamics_substep, dt, & 
                                           cellThreadStart(thread), cellThreadEnd(thread), &
                                           vertexThreadStart(thread), vertexThreadEnd(thread), &
                                           edgeThreadStart(thread), edgeThreadEnd(thread), &

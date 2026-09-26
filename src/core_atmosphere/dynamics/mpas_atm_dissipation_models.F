@@ -1691,9 +1691,9 @@ contains
             kdiag = 1
             do k=2,nVertLevels-1
                ! Lower, main, and upper diagonals of 1D column Laplacian
-               idiag_lowr(kdiag) = 1.0_RKIND - dt * turb_vflux(k-1) * rdzw(k)
-               idiag_main(kdiag) = 1.0_RKIND + dt * (turb_vflux(k+1) + turb_vflux(k)) * rdzw(k)
-               idiag_uppr(kdiag) = 1.0_RKIND - dt * turb_vflux(k+1) * rdzw(k)
+               idiag_lowr(kdiag) = 1.0_RKIND + dt * turb_vflux(k-1) * rdzw(k)
+               idiag_main(kdiag) = 1.0_RKIND - dt * (turb_vflux(k+1) + turb_vflux(k)) * rdzw(k)
+               idiag_uppr(kdiag) = 1.0_RKIND + dt * turb_vflux(k+1) * rdzw(k)
                kdiag = kdiag + 1
             end do
 
