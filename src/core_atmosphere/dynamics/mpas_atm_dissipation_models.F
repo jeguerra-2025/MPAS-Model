@@ -1329,7 +1329,7 @@ contains
       real (kind=RKIND), dimension(num_scalars,nVertLevels+1) :: turb_vflux_scalars
       real (kind=RKIND), dimension(nVertLevels) :: rho_k_at_w, zz_at_w
 
-      real (kind=RKIND) :: moisture_flux, heat_flux, theta_m_flux
+      real (kind=RKIND) :: moisture_flux, heat_flux, theta_m_flux, surf_factor
       real (kind=RKIND) :: qv_cell, theta_m_cell, theta_cell
 
       ! Insert column variables for implicit tridiagonal system (3 column arrays)
@@ -1670,51 +1670,70 @@ contains
                endif
 
                qv_cell = scalars(index_qv,1,iCell)
-               theta_m_cell = theta_m(1,iCell)
+               theta_m_cell = 1.0_RKIND !theta_m(1,iCell)
                theta_cell = theta_m_cell/(1.0+(rv/rgas)*qv_cell)
 
                theta_m_flux = heat_flux*(1.0+(rv/rgas)*qv_cell)+(rv/rgas)*theta_cell*moisture_flux
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                moisture_flux = moisture_flux*rho_zz(1,iCell)
-               turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels) * & 
-                                          (theta_m(nVertLevels,iCell)-theta_m(nVertLevels-1,iCell))
 
+               surf_factor = theta_m(1,iCell)
             else
-
-               turb_vflux(1) = turb_vflux(2) * (theta_m(2,iCell)-theta_m(1,iCell))
-               turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels) * & 
-                                          (theta_m(nVertLevels,iCell)-theta_m(nVertLevels-1,iCell))
-
+               ! Neumann BC at the ground
+               turb_vflux(1) = turb_vflux(2)
+               surf_factor = (theta_m(2,iCell)-theta_m(1,iCell))
             end if
+            ! Neumann BC at the model top (true in all cases)
+            turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
 
             !$acc loop vector
             kdiag = 1
             do k=2,nVertLevels-1
                ! Lower, main, and upper diagonals of 1D column Laplacian
-               idiag_lowr(kdiag) = 1.0_RKIND + dt * turb_vflux(k-1) * rdzw(k)
-               idiag_main(kdiag) = 1.0_RKIND - dt * (turb_vflux(k+1) + turb_vflux(k)) * rdzw(k)
-               idiag_uppr(kdiag) = 1.0_RKIND + dt * turb_vflux(k+1) * rdzw(k)
+               if (k == 2) then
+                  idiag_lowr(kdiag) = 0.0_RKIND
+               else
+                  idiag_lowr(kdiag) = 0.0_RKIND - dt * turb_vflux(k-1) * rdzw(k)
+               end if
+
+               idiag_main(kdiag) = 1.0_RKIND + dt * (turb_vflux(k+1) + turb_vflux(k)) * rdzw(k)
+
+               if (k == nVertLevels-1) then
+                  idiag_uppr(kdiag) = 0.0_RKIND
+               else
+                  idiag_uppr(kdiag) = 0.0_RKIND - dt * turb_vflux(k+1) * rdzw(k)
+               end if
                kdiag = kdiag + 1
             end do
 
-            ! Execute the solver for this column to get local updated state qe_new
+            ! Execute the solver for this column to get local updated state qc_new
             call tridiag3(nVertLevels-2, idiag_lowr, &
                            idiag_main, idiag_uppr, &
                            theta_m(2:nVertLevels-1,iCell), qc_new)
 
-            ! Update tendency on interior cells
+            ! Update tendency on interior cells with implicit estimate of qc^(t+1)
             kdiag = 1
             do k=2,nVertLevels-1
-               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + 0.0 !(qc_new(kdiag) - theta_m(k,iCell)) / dt
+               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) - (qc_new(kdiag) - theta_m(k,iCell)) / dt
                kdiag = kdiag + 1
             end do
             
-            ! Update tendency on boundary cells
+            ! Update tendency on boundary cells with explicit values
             tend_theta_euler(1,iCell) = tend_theta_euler(1,iCell) &
-                                          - rdzw(1)*(turb_vflux(2)-turb_vflux(1))
-            tend_theta_euler(nVertLevels,iCell) = tend_theta_euler(nVertLevels,iCell) &
-                                          - rdzw(nVertLevels)*(turb_vflux(nVertLevels+1)-turb_vflux(nVertLevels))
-
+                                          - rdzw(1)*(turb_vflux(2) * (theta_m(2,iCell)-theta_m(1,iCell)) &
+                                          - turb_vflux(1) * surf_factor)
+            tend_theta_euler(nVertLevels,iCell) = tend_theta_euler(nVertLevels,iCell) - 0.0_RKIND !&
+                                          !- rdzw(nVertLevels)*(turb_vflux(nVertLevels+1) * (theta_m(nVertLevels,iCell)-theta_m(nVertLevels-1,iCell)) &
+                                          !- turb_vflux(nVertLevels))
+            
+            ! THIS IS TO TEST FOR ANY CHANGES THAT BREAK THE EXPLICIT EVALUATION
+            !$acc loop vector
+            !do k=2,nVertLevels-1
+            !   tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) &
+            !                               - rdzw(k)*(turb_vflux(k+1)*(theta_m(k+1,iCell)-theta_m(k,iCell))&
+            !                                         -turb_vflux(k)*(theta_m(k,iCell)-theta_m(k-1,iCell)))
+            !end do
+            
             !$acc loop vector
             !do k=1,nVertLevels
             !   tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) &
