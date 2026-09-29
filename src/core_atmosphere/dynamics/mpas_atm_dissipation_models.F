@@ -1333,10 +1333,16 @@ contains
       real (kind=RKIND) :: qv_cell, theta_m_cell, theta_cell
 
       ! Insert column variables for implicit tridiagonal system (3 column arrays)
-      real (kind=RKIND), dimension(nVertLevels-1) :: idiag_lowr
-      real (kind=RKIND), dimension(nVertLevels-1) :: idiag_main
-      real (kind=RKIND), dimension(nVertLevels-1) :: idiag_uppr
-      real (kind=RKIND), dimension(nVertLevels-1) :: qc_new ! locally updated generic center quantity per column
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_lowr
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_main
+      real (kind=RKIND), dimension(nVertLevels) :: idiag_uppr
+      real (kind=RKIND), dimension(nVertLevels) :: qc_new ! locally updated generic center quantity per column
+
+      ! Diagnostic/debug variables for implicit code
+      real (kind=RKIND), dimension(nVertLevels+1) :: delta_q
+      real (kind=RKIND), dimension(nVertLevels+1) :: turb_imp
+      real (kind=RKIND), dimension(nVertLevels) :: dqdt_exp
+      real (kind=RKIND), dimension(nVertLevels) :: dqdt_imp
 
       DEBUG_WRITE(' begin scalar_dissipation_3d ')
       DEBUG_WRITE(' 4th order hyperviscosity is $r ' COMMA realArgs=(/h_theta_eddy_visc4/))
@@ -1521,11 +1527,11 @@ contains
                   !                        -(theta_m(k  ,iCell)-theta_m(k-1,iCell))/(z0-zm) )/(0.5*(zp-zm))
 
                   ! Lower, main, and upper diagonals of 1D column Laplacian
-                  idiag_lowr(kdiag) = 1.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (z0-zm) / &
+                  idiag_lowr(kdiag) = 0.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (z0-zm) / &
                                                                               (0.5*(zp-zm))
                   idiag_main(kdiag) = 1.0_RKIND + dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm)) / &
                                                                               (0.5*(zp-zm))
-                  idiag_uppr(kdiag) = 1.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (zp-z0) / &
+                  idiag_uppr(kdiag) = 0.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (zp-z0) / &
                                                                               (0.5*(zp-zm))
                   kdiag = kdiag + 1
                end do
@@ -1576,11 +1582,11 @@ contains
                   !                         (t_mix(k+1)-t_mix(k))/(zp-z0)      &
                   !                        -(t_mix(k)-t_mix(k-1))/(z0-zm) )/(0.5*(zp-zm))
                   ! Lower, main, and upper diagonals of 1D column Laplacian
-                  idiag_lowr(kdiag) = 1.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (z0-zm) / &
+                  idiag_lowr(kdiag) = 0.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (z0-zm) / &
                                                                               (0.5*(zp-zm))
                   idiag_main(kdiag) = 1.0_RKIND + dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm)) / &
                                                                               (0.5*(zp-zm))
-                  idiag_uppr(kdiag) = 1.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (zp-z0) / &
+                  idiag_uppr(kdiag) = 0.0_RKIND - dt * rho_zz(k,iCell) * prandtl_inv * v_theta_eddy_visc2 / (zp-z0) / &
                                                                               (0.5*(zp-zm))
                   kdiag = kdiag + 1
                end do
@@ -1650,7 +1656,9 @@ contains
                rho_k_at_w(k) =  fzm(k)*rho_zz(k  ,iCell)*zz(k  ,iCell)*zz(k  ,iCell)*eddy_visc_vert(k  ,iCell) &
                              +fzp(k)*rho_zz(k-1,iCell)*zz(k-1,iCell)*zz(k-1,iCell)*eddy_visc_vert(k-1,iCell)
                zz_at_w(k) = fzm(k)*zz(k,iCell)+fzp(k)*zz(k-1,iCell)
-               turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) !*(theta_m(k,iCell)-theta_m(k-1,iCell))
+               delta_q(k) = (theta_m(k,iCell)-theta_m(k-1,iCell))
+               turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q(k)
+               turb_imp(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
             end do
 
             ! test boundary conditions for supercell and les test cases
@@ -1670,69 +1678,57 @@ contains
                endif
 
                qv_cell = scalars(index_qv,1,iCell)
-               theta_m_cell = 1.0_RKIND !theta_m(1,iCell)
+               theta_m_cell = theta_m(1,iCell)
                theta_cell = theta_m_cell/(1.0+(rv/rgas)*qv_cell)
 
                theta_m_flux = heat_flux*(1.0+(rv/rgas)*qv_cell)+(rv/rgas)*theta_cell*moisture_flux
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                moisture_flux = moisture_flux*rho_zz(1,iCell)
 
-               surf_factor = theta_m(1,iCell)
+               delta_q(1) = theta_m(1,iCell)
+               turb_imp(1) = turb_vflux(1) / delta_q(1)
+
+               idiag_lowr(1) = 0.0_RKIND
+               idiag_main(1) = 1.0_RKIND - dt * (turb_imp(2) + &
+                                                 turb_imp(1)) * rdzw(1)
+               idiag_uppr(1) = 0.0_RKIND + dt * turb_imp(2) * rdzw(1)
             else
                ! Neumann BC at the ground
                turb_vflux(1) = turb_vflux(2)
-               surf_factor = (theta_m(2,iCell)-theta_m(1,iCell))
+               delta_q(1) = 1.0_RKIND !delta_q(2)
+               turb_imp(1) = 0.0_RKIND
+
+               idiag_lowr(1) = 0.0_RKIND
+               idiag_main(1) = 1.0_RKIND
+               idiag_uppr(1) = 0.0_RKIND
             end if
             ! Neumann BC at the model top (true in all cases)
+            delta_q(nVertLevels+1) = 1.0_RKIND !delta_q(nVertLevels)
             turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
 
             !$acc loop vector
-            kdiag = 1
-            do k=2,nVertLevels-1
+            do k=2,nVertLevels
                ! Lower, main, and upper diagonals of 1D column Laplacian
-               if (k == 2) then
-                  idiag_lowr(kdiag) = 0.0_RKIND
-               else
-                  idiag_lowr(kdiag) = 0.0_RKIND - dt * turb_vflux(k-1) * rdzw(k)
-               end if
-
-               idiag_main(kdiag) = 1.0_RKIND + dt * (turb_vflux(k+1) + turb_vflux(k)) * rdzw(k)
-
-               if (k == nVertLevels-1) then
-                  idiag_uppr(kdiag) = 0.0_RKIND
-               else
-                  idiag_uppr(kdiag) = 0.0_RKIND - dt * turb_vflux(k+1) * rdzw(k)
-               end if
-               kdiag = kdiag + 1
+               idiag_lowr(k) = 0.0_RKIND + dt * turb_imp(k) * rdzw(k)
+               idiag_main(k) = 1.0_RKIND - dt * (turb_imp(k+1) + &
+                                                 turb_imp(k)) * rdzw(k)
+               idiag_uppr(k) = 0.0_RKIND + dt * turb_imp(k+1) * rdzw(k)
             end do
 
             ! Execute the solver for this column to get local updated state qc_new
-            call tridiag3(nVertLevels-2, idiag_lowr, &
+            call tridiag3(nVertLevels, idiag_lowr, &
                            idiag_main, idiag_uppr, &
-                           theta_m(2:nVertLevels-1,iCell), qc_new)
-
-            ! Update tendency on interior cells with implicit estimate of qc^(t+1)
-            kdiag = 1
-            do k=2,nVertLevels-1
-               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) - (qc_new(kdiag) - theta_m(k,iCell)) / dt
-               kdiag = kdiag + 1
-            end do
-            
-            ! Update tendency on boundary cells with explicit values
-            tend_theta_euler(1,iCell) = tend_theta_euler(1,iCell) &
-                                          - rdzw(1)*(turb_vflux(2) * (theta_m(2,iCell)-theta_m(1,iCell)) &
-                                          - turb_vflux(1) * surf_factor)
-            tend_theta_euler(nVertLevels,iCell) = tend_theta_euler(nVertLevels,iCell) - 0.0_RKIND !&
-                                          !- rdzw(nVertLevels)*(turb_vflux(nVertLevels+1) * (theta_m(nVertLevels,iCell)-theta_m(nVertLevels-1,iCell)) &
-                                          !- turb_vflux(nVertLevels))
+                           theta_m(1:nVertLevels,iCell), qc_new)
             
             ! THIS IS TO TEST FOR ANY CHANGES THAT BREAK THE EXPLICIT EVALUATION
             !$acc loop vector
-            !do k=2,nVertLevels-1
-            !   tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) &
-            !                               - rdzw(k)*(turb_vflux(k+1)*(theta_m(k+1,iCell)-theta_m(k,iCell))&
-            !                                         -turb_vflux(k)*(theta_m(k,iCell)-theta_m(k-1,iCell)))
-            !end do
+            do k=1,nVertLevels
+               dqdt_exp(k) = rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
+               dqdt_imp(k) = -(qc_new(k) - theta_m(k,iCell)) / dt
+               
+               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) - dqdt_exp(k)
+               !print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
+            end do
             
             !$acc loop vector
             !do k=1,nVertLevels
