@@ -1720,14 +1720,16 @@ contains
                            idiag_main, idiag_uppr, &
                            theta_m(1:nVertLevels,iCell), qc_new)
             
-            ! THIS IS TO TEST FOR ANY CHANGES THAT BREAK THE EXPLICIT EVALUATION
             !$acc loop vector
             do k=1,nVertLevels
+               ! Explicit and implicit estimates of tendency
                dqdt_exp(k) = rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
                dqdt_imp(k) = -(qc_new(k) - theta_m(k,iCell)) / dt
                
-               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) - dqdt_exp(k)
-               !print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
+               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) - dqdt_imp(k)
+
+               ! Debug difference between exp and imp estimates
+               print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
             end do
             
             !$acc loop vector
