@@ -832,7 +832,6 @@ contains
                cell2 = cellsOnEdge(2,iEdge)
 
                !$acc loop vector
-               kdiag = 1
                do k=2,nVertLevels-1
 
                   z1 = 0.5*(zgrid(k-1,cell1)+zgrid(k-1,cell2))
@@ -844,32 +843,10 @@ contains
                   z0 = 0.5*(z2+z3)
                   zp = 0.5*(z3+z4)
 
-                  !tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
-                  !                   (u(k+1,iEdge)-u(k  ,iEdge))/(zp-z0)                      &
-                  !                  -(u(k  ,iEdge)-u(k-1,iEdge))/(z0-zm) )/(0.5*(zp-zm))
-
-                  ! Lower, main, and upper diagonals of 1D column Laplacian
-                  idiag_lowr(kdiag) = 1.0_RKIND - dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm) / &
-                                                                              (0.5*(zp-zm))
-                  idiag_main(kdiag) = 1.0_RKIND + dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm)) / &
-                                                                              (0.5*(zp-zm))
-                  idiag_uppr(kdiag) = 1.0_RKIND - dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0) / &
-                                                                              (0.5*(zp-zm))
-                  kdiag = kdiag + 1
+                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
+                                     (u(k+1,iEdge)-u(k  ,iEdge))/(zp-z0)                      &
+                                    -(u(k  ,iEdge)-u(k-1,iEdge))/(z0-zm) )/(0.5*(zp-zm))
                end do
-
-               ! Execute the solver for this column to get local updated state qe_new
-               call tridiag3(nVertLevels-2, idiag_lowr, &
-                             idiag_main, idiag_uppr, &
-                             u(2:nVertLevels-1,iEdge), qe_new)
-
-               ! Update the total tendency with the implicitly derived partial solution
-               kdiag = 1
-               do k=2,nVertLevels-1
-                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + (qe_new(kdiag) - u(k,iEdge)) / dt
-                  kdiag = kdiag + 1
-               end do
-
             end do
 
             !$acc end parallel
@@ -891,7 +868,6 @@ contains
                end do
 
                !$acc loop vector
-               kdiag = 1
                do k=2,nVertLevels-1
 
                   z1 = 0.5*(zgrid(k-1,cell1)+zgrid(k-1,cell2))
@@ -903,30 +879,10 @@ contains
                   z0 = 0.5*(z2+z3)
                   zp = 0.5*(z3+z4)
 
-                  !tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
-                  !                   (u_mix(k+1)-u_mix(k  ))/(zp-z0)                      &
-                  !                  -(u_mix(k  )-u_mix(k-1))/(z0-zm) )/(0.5*(zp-zm))
-
-                  ! Lower, main, and upper diagonals of 1D column Laplacian
-                  idiag_lowr(kdiag) = 1.0_RKIND - dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (z0-zm) / &
-                                                                              (0.5*(zp-zm))
-                  idiag_main(kdiag) = 1.0_RKIND + dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 * (1.0_RKIND / (zp-z0) + 1.0_RKIND / (z0-zm)) / &
-                                                                              (0.5*(zp-zm))
-                  idiag_uppr(kdiag) = 1.0_RKIND - dt * rho_edge(k,iEdge) * v_mom_eddy_visc2 / (zp-z0) / &
-                                                                              (0.5*(zp-zm))
-                  kdiag = kdiag + 1
+                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + rho_edge(k,iEdge) * v_mom_eddy_visc2*(  &
+                                     (u_mix(k+1)-u_mix(k  ))/(zp-z0)                      &
+                                    -(u_mix(k  )-u_mix(k-1))/(z0-zm) )/(0.5*(zp-zm))
                end do
-
-               ! Execute the solver for this column to get local updated state qe_new
-               call tridiag3(nVertLevels-1, idiag_lowr, &
-                             idiag_main, idiag_uppr, &
-                             u_mix, qe_new)
-
-               ! Update the total tendency
-               do k=2,nVertLevels-1
-                  tend_u_euler(k,iEdge) = tend_u_euler(k,iEdge) + (qe_new(k) - u_mix(k)) / dt
-               end do
-
             end do
 
             !$acc end parallel
@@ -1163,32 +1119,11 @@ contains
          do iCell=cellSolveStart,cellSolveEnd
 !DIR$ IVDEP
             !$acc loop vector
-            kdiag = 1
             do k=2,nVertLevels
                
-               !tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + v_mom_eddy_visc2*0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell))*(  &
-               !                            (w(k+1,iCell)-w(k  ,iCell))*rdzw(k)                              &
-               !                           -(w(k  ,iCell)-w(k-1,iCell))*rdzw(k-1) )*rdzu(k)
-               ! Lower, main, and upper diagonals of 1D column Laplacian
-               idiag_lowr(kdiag) = 1.0_RKIND - dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
-                              v_mom_eddy_visc2 * rdzw(k-1) * rdzu(k)
-               idiag_main(kdiag) = 1.0_RKIND + dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
-                              v_mom_eddy_visc2 * (rdzw(k) + rdzw(k-1)) * rdzu(k)
-               idiag_uppr(kdiag) = 1.0_RKIND - dt * 0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell)) * &
-                              v_mom_eddy_visc2 * rdzw(k) * rdzu(k)
-               kdiag = kdiag + 1
-            end do
-
-            ! Execute the solver for this column to get local updated state qe_new
-            call tridiag3(nVertLevels, idiag_lowr, &
-                        idiag_main, idiag_uppr, &
-                        w(2:,iCell), qc_new)
-
-            ! Update the total tendency
-            kdiag = 1
-            do k=2,nVertLevels
-               tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + (qc_new(kdiag) - w(k,iCell)) / dt
-               kdiag = kdiag + 1
+               tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + v_mom_eddy_visc2*0.5*(rho_zz(k,iCell)+rho_zz(k-1,iCell))*(  &
+                                           (w(k+1,iCell)-w(k  ,iCell))*rdzw(k)                              &
+                                          -(w(k  ,iCell)-w(k-1,iCell))*rdzw(k-1) )*rdzu(k)
             end do
          end do
 
@@ -1321,7 +1256,7 @@ contains
       real (kind=RKIND), dimension(nVertLevels,nCells+1) :: delsq_theta
 
       ! local variables
-      integer :: cell1, cell2, iEdge, iCell, i, k, iScalar, kdiag
+      integer :: cell1, cell2, iEdge, iCell, i, k, iScalar
       real (kind=RKIND) :: r_areaCell, edge_sign, theta_turb_flux, pr_scale
       real (kind=RKIND) :: z1, z2, z3, z4, zm, z0, zp
       real (kind=RKIND), dimension(nVertLevels) :: t_mix
@@ -1525,7 +1460,6 @@ contains
                   tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + v_theta_eddy_visc2*prandtl_inv*rho_zz(k,iCell)*(&
                                            (theta_m(k+1,iCell)-theta_m(k  ,iCell))/(zp-z0)                 &
                                           -(theta_m(k  ,iCell)-theta_m(k-1,iCell))/(z0-zm) )/(0.5*(zp-zm))
-                  kdiag = kdiag + 1
                end do
             end do
 
@@ -1648,7 +1582,7 @@ contains
                moisture_flux = moisture_flux*rho_zz(1,iCell)
 
                delta_q(1) = theta_m(1,iCell)
-               turb_imp(1) = turb_vflux(1) / delta_q(1)
+               turb_imp(1) = turb_vflux(1) / delta_q(1) ! Value is NOT used
                qc_rhs(1) = theta_m(1,iCell) - turb_vflux(1)
 
                idiag_lowr(1) = 0.0_RKIND
