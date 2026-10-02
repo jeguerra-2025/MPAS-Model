@@ -1551,8 +1551,10 @@ contains
                rho_k_at_w(k) =  fzm(k)*rho_zz(k  ,iCell)*zz(k  ,iCell)*zz(k  ,iCell)*eddy_visc_vert(k  ,iCell) &
                              +fzp(k)*rho_zz(k-1,iCell)*zz(k-1,iCell)*zz(k-1,iCell)*eddy_visc_vert(k-1,iCell)
                zz_at_w(k) = fzm(k)*zz(k,iCell)+fzp(k)*zz(k-1,iCell)
+               
                delta_q(k) = (theta_m(k,iCell)-theta_m(k-1,iCell))
                turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q(k)
+               
                turb_imp(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
                qc_rhs(k) = theta_m(k,iCell)
             end do
@@ -1583,7 +1585,7 @@ contains
 
                delta_q(1) = theta_m(1,iCell)
                turb_imp(1) = turb_vflux(1) / delta_q(1) ! Value is NOT used
-               qc_rhs(1) = theta_m(1,iCell) - turb_vflux(1)
+               qc_rhs(1) = theta_m(1,iCell) - turb_vflux(1) * rdzw(1)
 
                idiag_lowr(1) = 0.0_RKIND
                idiag_main(1) = 1.0_RKIND - dt * turb_imp(2) * rdzw(1)
@@ -1601,6 +1603,7 @@ contains
             end if
             ! Neumann BC at the model top (true in all cases)
             delta_q(nVertLevels+1) = 1.0_RKIND
+            turb_imp(nVertLevels+1) = 0.0_RKIND
             turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
 
             !$acc loop vector
