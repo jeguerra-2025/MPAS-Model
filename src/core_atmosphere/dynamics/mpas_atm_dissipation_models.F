@@ -1585,7 +1585,7 @@ contains
 
                delta_q(1) = theta_m(1,iCell)
                turb_imp(1) = turb_vflux(1) / delta_q(1) ! Value is NOT used
-               qc_rhs(1) = theta_m(1,iCell) - turb_vflux(1) * rdzw(1)
+               qc_rhs(1) = theta_m(1,iCell) + turb_vflux(1) * rdzw(1)
 
                idiag_lowr(1) = 0.0_RKIND
                idiag_main(1) = 1.0_RKIND - dt * turb_imp(2) * rdzw(1)
