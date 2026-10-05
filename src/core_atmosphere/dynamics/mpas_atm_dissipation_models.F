@@ -1260,7 +1260,7 @@ contains
       real (kind=RKIND) :: r_areaCell, edge_sign, theta_turb_flux, pr_scale
       real (kind=RKIND) :: z1, z2, z3, z4, zm, z0, zp
       real (kind=RKIND), dimension(nVertLevels) :: t_mix
-      real (kind=RKIND), dimension(nVertLevels+1) :: turb_vflux, prandtl_1d_inverse
+      real (kind=RKIND), dimension(nVertLevels+1) :: prandtl_1d_inverse!, turb_vflux
       real (kind=RKIND), dimension(num_scalars,nVertLevels+1) :: turb_vflux_scalars
       real (kind=RKIND), dimension(nVertLevels) :: rho_k_at_w, zz_at_w
 
@@ -1275,8 +1275,8 @@ contains
 
       ! Diagnostic/debug variables for implicit code
       real (kind=RKIND), dimension(nVertLevels+1) :: delta_q
+      !real (kind=RKIND), dimension(nVertLevels) :: dqdt_exp
       real (kind=RKIND), dimension(nVertLevels+1) :: turb_imp
-      real (kind=RKIND), dimension(nVertLevels) :: dqdt_exp
       real (kind=RKIND), dimension(nVertLevels) :: dqdt_imp
       real (kind=RKIND), dimension(nVertLevels) :: qc_rhs ! RHS array for theta and scalars at centers
 
@@ -1513,8 +1513,8 @@ contains
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
             ! compute turbulent fluxes
 
-            turb_vflux(nVertlevels+1) = 0.  !  no turbulent flux out of the domain
-            turb_vflux(1) = 0.  !  lower bc flux handled where ???
+            !turb_vflux(nVertlevels+1) = 0.  !  no turbulent flux out of the domain
+            !turb_vflux(1) = 0.  !  lower bc flux handled where ???
 
             if ( les_model_opt == LES_MODEL_3D_SMAGORINSKY ) then
                !$acc loop vector
@@ -1553,7 +1553,7 @@ contains
                zz_at_w(k) = fzm(k)*zz(k,iCell)+fzp(k)*zz(k-1,iCell)
                
                delta_q(k) = (theta_m(k,iCell)-theta_m(k-1,iCell))
-               turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q(k)
+               !turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q(k)
                
                turb_imp(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
                qc_rhs(k) = theta_m(k,iCell)
@@ -1580,31 +1580,32 @@ contains
                theta_cell = theta_m_cell/(1.0+(rv/rgas)*qv_cell)
 
                theta_m_flux = heat_flux*(1.0+(rv/rgas)*qv_cell)+(rv/rgas)*theta_cell*moisture_flux
-               turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
+               !turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                moisture_flux = moisture_flux*rho_zz(1,iCell)
 
                delta_q(1) = theta_m(1,iCell)
-               turb_imp(1) = turb_vflux(1) / delta_q(1) ! Value is NOT used
-               qc_rhs(1) = theta_m(1,iCell) + turb_vflux(1) * rdzw(1)
+               turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / delta_q(1) ! Value is NOT used
+               qc_rhs(1) = theta_m(1,iCell) + turb_imp(1) * delta_q(1) * rdzw(1)
 
                idiag_lowr(1) = 0.0_RKIND
                idiag_main(1) = 1.0_RKIND - dt * turb_imp(2) * rdzw(1)
                idiag_uppr(1) = 0.0_RKIND + dt * turb_imp(2) * rdzw(1)
             else
                ! Neumann BC at the ground
-               turb_vflux(1) = turb_vflux(2)
+               !turb_vflux(1) = turb_vflux(2)
                delta_q(1) = 1.0_RKIND
-               turb_imp(1) = 0.0_RKIND
+               turb_imp(1) = turb_imp(2)
                qc_rhs(1) = theta_m(1,iCell)
 
-               idiag_lowr(1) = 0.0_RKIND
-               idiag_main(1) = 1.0_RKIND
-               idiag_uppr(1) = 0.0_RKIND
+               idiag_lowr(1) = 0.0_RKIND + dt * turb_imp(1) * rdzw(1)
+               idiag_main(1) = 1.0_RKIND - dt * (turb_imp(2) + &
+                                                 turb_imp(1)) * rdzw(1)
+               idiag_uppr(1) = 0.0_RKIND + dt * turb_imp(2) * rdzw(1)
             end if
             ! Neumann BC at the model top (true in all cases)
+            !turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
             delta_q(nVertLevels+1) = 1.0_RKIND
-            turb_imp(nVertLevels+1) = 0.0_RKIND
-            turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
+            turb_imp(nVertLevels+1) = turb_imp(nVertLevels)
 
             !$acc loop vector
             do k=2,nVertLevels
@@ -1622,13 +1623,12 @@ contains
             
             !$acc loop vector
             do k=1,nVertLevels
-               ! Explicit and implicit estimates of tendency
-               dqdt_exp(k) = -rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
+               ! Implicit estimate of tendency and update
                dqdt_imp(k) = +(qc_new(k) - theta_m(k,iCell)) / dt
-               
                tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + dqdt_imp(k)
 
                ! Debug difference between exp and imp estimates
+               !dqdt_exp(k) = -rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
                !print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
             end do
             
