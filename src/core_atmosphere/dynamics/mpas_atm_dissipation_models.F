@@ -1594,7 +1594,7 @@ contains
                ! Neumann BC at the ground
                !turb_vflux(1) = turb_vflux(2)
                delta_q(1) = 1.0_RKIND
-               turb_imp(1) = turb_imp(2)
+               turb_imp(1) = 0.0_RKIND !turb_imp(2)
                qc_rhs(1) = theta_m(1,iCell)
 
                idiag_lowr(1) = 0.0_RKIND + dt * turb_imp(1) * rdzw(1)
@@ -1605,7 +1605,7 @@ contains
             ! Neumann BC at the model top (true in all cases)
             !turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
             delta_q(nVertLevels+1) = 1.0_RKIND
-            turb_imp(nVertLevels+1) = turb_imp(nVertLevels)
+            turb_imp(nVertLevels+1) = 0.0_RKIND !turb_imp(nVertLevels)
 
             !$acc loop vector
             do k=2,nVertLevels
