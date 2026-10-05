@@ -1597,18 +1597,20 @@ contains
                turb_imp(1) = 0.0_RKIND !turb_imp(2)
                qc_rhs(1) = theta_m(1,iCell)
 
-               idiag_lowr(1) = 0.0_RKIND + dt * turb_imp(1) * rdzw(1)
-               idiag_main(1) = 1.0_RKIND - dt * (turb_imp(2) + &
-                                                 turb_imp(1)) * rdzw(1)
-               idiag_uppr(1) = 0.0_RKIND + dt * turb_imp(2) * rdzw(1)
+               idiag_lowr(1) = 0.0_RKIND
+               idiag_main(1) = 1.0_RKIND
+               idiag_uppr(1) = 0.0_RKIND
             end if
             ! Neumann BC at the model top (true in all cases)
             !turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
             delta_q(nVertLevels+1) = 1.0_RKIND
-            turb_imp(nVertLevels+1) = 0.0_RKIND !turb_imp(nVertLevels)
+            turb_imp(nVertLevels+1) = turb_imp(nVertLevels)
+            idiag_lowr(nVertLevels) = 0.0_RKIND 
+            idiag_main(nVertLevels) = 1.0_RKIND 
+            idiag_uppr(nVertLevels) = 0.0_RKIND
 
             !$acc loop vector
-            do k=2,nVertLevels
+            do k=2,nVertLevels-1
                ! Lower, main, and upper diagonals of 1D column Laplacian
                idiag_lowr(k) = 0.0_RKIND + dt * turb_imp(k) * rdzw(k)
                idiag_main(k) = 1.0_RKIND - dt * (turb_imp(k+1) + &
