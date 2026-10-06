@@ -1275,7 +1275,7 @@ contains
 
       ! Diagnostic/debug variables for implicit code
       real (kind=RKIND), dimension(nVertLevels+1) :: delta_q
-      !real (kind=RKIND), dimension(nVertLevels) :: dqdt_exp
+      real (kind=RKIND), dimension(nVertLevels) :: dqdt_exp
       real (kind=RKIND), dimension(nVertLevels+1) :: turb_imp
       real (kind=RKIND), dimension(nVertLevels) :: dqdt_imp
       real (kind=RKIND), dimension(nVertLevels) :: qc_rhs ! RHS array for theta and scalars at centers
@@ -1556,7 +1556,8 @@ contains
                turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q(k)
                
                turb_imp(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
-               qc_rhs(k) = dt * turb_vflux(k) * rdzw(k) !theta_m(k,iCell)
+               dqdt_exp(k) = -rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
+               qc_rhs(k) = dt * dqdt_exp(k) !theta_m(k,iCell)
             end do
 
             ! test boundary conditions for supercell and les test cases
@@ -1586,7 +1587,8 @@ contains
                delta_q(1) = theta_m(1,iCell)
                turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / delta_q(1) ! Value is NOT used
                !qc_rhs(1) = theta_m(1,iCell) + turb_imp(1) * delta_q(1) * rdzw(1)
-               qc_rhs(1) = dt * (turb_vflux(1) + turb_imp(1) * delta_q(1)) * rdzw(1)
+               dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
+               qc_rhs(1) = dt * (dqdt_exp(1) + turb_imp(1) * delta_q(1) * rdzw(1))
 
                !idiag_lowr(1) = 0.0_RKIND
                !idiag_main(1) = 1.0_RKIND - dt * turb_imp(2) * rdzw(1)
@@ -1596,7 +1598,8 @@ contains
                turb_vflux(1) = turb_vflux(2)
                delta_q(1) = 1.0_RKIND
                turb_imp(1) = turb_imp(2)
-               qc_rhs(1) = dt * turb_vflux(1) * rdzw(1) !theta_m(1,iCell)
+               dqdt_exp(1) = 0.0_RKIND
+               qc_rhs(1) = 0.0_RKIND !theta_m(1,iCell)
 
                !idiag_lowr(1) = 0.0_RKIND
                !idiag_main(1) = 1.0_RKIND
@@ -1606,7 +1609,6 @@ contains
             turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
             delta_q(nVertLevels+1) = 1.0_RKIND
             turb_imp(nVertLevels+1) = turb_imp(nVertLevels)
-            
             
             !idiag_lowr(nVertLevels) = 0.0_RKIND 
             !idiag_main(nVertLevels) = 1.0_RKIND 
@@ -1635,7 +1637,6 @@ contains
                tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + dqdt_imp(k)
 
                ! Debug difference between exp and imp estimates
-               !dqdt_exp(k) = -rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
                !print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
             end do
             
