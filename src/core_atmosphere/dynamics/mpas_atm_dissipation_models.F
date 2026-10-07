@@ -1274,7 +1274,7 @@ contains
       real (kind=RKIND), dimension(nVertLevels) :: qc_new ! locally updated generic center quantity per column
 
       ! Diagnostic/debug variables for implicit code
-      real (kind=RKIND), dimension(nVertLevels+1) :: delta_q
+      real (kind=RKIND) :: delta_q
       real (kind=RKIND), dimension(nVertLevels) :: dqdt_exp
       real (kind=RKIND), dimension(nVertLevels+1) :: turb_imp
       real (kind=RKIND), dimension(nVertLevels) :: dqdt_imp
@@ -1552,8 +1552,8 @@ contains
                              +fzp(k)*rho_zz(k-1,iCell)*zz(k-1,iCell)*zz(k-1,iCell)*eddy_visc_vert(k-1,iCell)
                zz_at_w(k) = fzm(k)*zz(k,iCell)+fzp(k)*zz(k-1,iCell)
                
-               delta_q(k) = (theta_m(k,iCell)-theta_m(k-1,iCell))
-               turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q(k)
+               delta_q = (theta_m(k,iCell)-theta_m(k-1,iCell))
+               turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q
                
                turb_imp(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
                dqdt_exp(k) = -rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
@@ -1584,35 +1584,20 @@ contains
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                moisture_flux = moisture_flux*rho_zz(1,iCell)
 
-               delta_q(1) = theta_m(1,iCell)
-               turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / delta_q(1) ! Value is NOT used
-               !qc_rhs(1) = theta_m(1,iCell) + turb_imp(1) * delta_q(1) * rdzw(1)
+               turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m(1,iCell) ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
-               qc_rhs(1) = dt * (dqdt_exp(1) + turb_imp(1) * delta_q(1) * rdzw(1))
-
-               !idiag_lowr(1) = 0.0_RKIND
-               !idiag_main(1) = 1.0_RKIND - dt * turb_imp(2) * rdzw(1)
-               !idiag_uppr(1) = 0.0_RKIND + dt * turb_imp(2) * rdzw(1)
+               qc_rhs(1) = dt * (dqdt_exp(1) + turb_vflux(1) * rdzw(1))
+               
             else
                ! Neumann BC at the ground
                turb_vflux(1) = turb_vflux(2)
-               delta_q(1) = 1.0_RKIND
                turb_imp(1) = turb_imp(2)
                dqdt_exp(1) = 0.0_RKIND
                qc_rhs(1) = 0.0_RKIND !theta_m(1,iCell)
-
-               !idiag_lowr(1) = 0.0_RKIND
-               !idiag_main(1) = 1.0_RKIND
-               !idiag_uppr(1) = 0.0_RKIND
             end if
             ! Neumann BC at the model top (true in all cases)
             turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
-            delta_q(nVertLevels+1) = 1.0_RKIND
             turb_imp(nVertLevels+1) = turb_imp(nVertLevels)
-            
-            !idiag_lowr(nVertLevels) = 0.0_RKIND 
-            !idiag_main(nVertLevels) = 1.0_RKIND 
-            !idiag_uppr(nVertLevels) = 0.0_RKIND
 
             !$acc loop vector
             do k=1,nVertLevels
