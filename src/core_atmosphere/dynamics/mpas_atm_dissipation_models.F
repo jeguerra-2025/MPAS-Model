@@ -1586,7 +1586,7 @@ contains
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m(1,iCell) ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
-               qc_rhs(1) = dt * (dqdt_exp(1) + turb_vflux(1) * rdzw(1))
+               qc_rhs(1) = dt * dqdt_exp(1) !+ turb_vflux(1) * rdzw(1))
 
             else
                ! Neumann BC at the ground
