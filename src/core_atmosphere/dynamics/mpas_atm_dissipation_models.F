@@ -1587,7 +1587,7 @@ contains
                turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m(1,iCell) ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
                qc_rhs(1) = dt * (dqdt_exp(1) + turb_vflux(1) * rdzw(1))
-               
+
             else
                ! Neumann BC at the ground
                turb_vflux(1) = turb_vflux(2)
@@ -1609,7 +1609,7 @@ contains
             end do
 
             ! Execute the solver for this column to get local updated state qc_new
-            call tridiag3(nVertLevels-1, idiag_lowr, &
+            call tridiag3(nVertLevels, idiag_lowr, &
                            idiag_main, idiag_uppr, &
                            qc_rhs, qc_new)
             !qc_new(nVertLevels) = 0.0_RKIND
