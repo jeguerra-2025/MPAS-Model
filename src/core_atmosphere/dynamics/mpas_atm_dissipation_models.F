@@ -1581,9 +1581,9 @@ contains
                theta_cell = theta_m_cell/(1.0+(rv/rgas)*qv_cell)
 
                theta_m_flux = heat_flux*(1.0+(rv/rgas)*qv_cell)+(rv/rgas)*theta_cell*moisture_flux
-               turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                moisture_flux = moisture_flux*rho_zz(1,iCell)
 
+               turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m(1,iCell) ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
                qc_rhs(1) = dt * (dqdt_exp(1) + turb_vflux(1) * rdzw(1))
@@ -1598,6 +1598,8 @@ contains
             ! Neumann BC at the model top (true in all cases)
             turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
             turb_imp(nVertLevels+1) = turb_imp(nVertLevels)
+            dqdt_exp(nVertLevels) = 0.0_RKIND
+            qc_rhs(nVertLevels) = 0.0_RKIND
 
             !$acc loop vector
             do k=1,nVertLevels
