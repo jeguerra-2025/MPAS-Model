@@ -1554,10 +1554,7 @@ contains
                
                delta_q = (theta_m(k,iCell)-theta_m(k-1,iCell))
                turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q
-               
                turb_imp(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
-               dqdt_exp(k) = -rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
-               qc_rhs(k) = dt * dqdt_exp(k) !theta_m(k,iCell)
             end do
 
             ! test boundary conditions for supercell and les test cases
@@ -1615,6 +1612,11 @@ contains
 
             !$acc loop vector
             do k=2,nVertLevels-1
+               
+               ! Set up internal RHS
+               dqdt_exp(k) = -rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
+               qc_rhs(k) = dt * dqdt_exp(k) !theta_m(k,iCell)
+
                ! Lower, main, and upper diagonals of 1D column Laplacian
                idiag_lowr(k) = 0.0_RKIND + dt * turb_imp(k) * rdzw(k)
                idiag_main(k) = 1.0_RKIND - dt * (turb_imp(k+1) + &
