@@ -1584,7 +1584,7 @@ contains
                moisture_flux = moisture_flux*rho_zz(1,iCell)
 
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
-               turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m(1,iCell) ! Value is NOT used
+               turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m_cell ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
                qc_rhs(1) = dt * dqdt_exp(1) !+ turb_vflux(1) * rdzw(1))
 
@@ -1611,10 +1611,10 @@ contains
             end do
 
             ! Execute the solver for this column to get local updated state qc_new
-            call tridiag3(nVertLevels, idiag_lowr, &
+            call tridiag3(nVertLevels-1, idiag_lowr, &
                            idiag_main, idiag_uppr, &
                            qc_rhs, qc_new)
-            !qc_new(nVertLevels) = 0.0_RKIND
+            qc_new(nVertLevels) = 0.0_RKIND
             
             !$acc loop vector
             do k=1,nVertLevels
@@ -1624,7 +1624,7 @@ contains
                tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + dqdt_imp(k)
 
                ! Debug difference between exp and imp estimates
-               !print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
+               print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
             end do
             
             !$acc loop vector
