@@ -1586,7 +1586,11 @@ contains
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m_cell ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
-               qc_rhs(1) = dt * dqdt_exp(1) !+ turb_vflux(1) * rdzw(1))
+               qc_rhs(1) = dt * dqdt_exp(1)
+
+               idiag_lowr(1) = 0.0_RKIND
+               idiag_main(1) = 1.0_RKIND - dt * turb_imp(2) * rdzw(1)
+               idiag_uppr(1) = 0.0_RKIND + dt * turb_imp(2) * rdzw(1)
 
             else
                ! Neumann BC at the ground
@@ -1594,6 +1598,10 @@ contains
                turb_imp(1) = turb_imp(2)
                dqdt_exp(1) = 0.0_RKIND
                qc_rhs(1) = 0.0_RKIND !theta_m(1,iCell)
+
+               idiag_lowr(1) = 0.0_RKIND
+               idiag_main(1) = 1.0_RKIND
+               idiag_uppr(1) = 0.0_RKIND
             end if
             ! Neumann BC at the model top (true in all cases)
             turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
@@ -1601,8 +1609,12 @@ contains
             dqdt_exp(nVertLevels) = 0.0_RKIND
             qc_rhs(nVertLevels) = 0.0_RKIND
 
+            idiag_lowr(nVertLevels) = 0.0_RKIND 
+            idiag_main(nVertLevels) = 1.0_RKIND 
+            idiag_uppr(nVertLevels) = 0.0_RKIND
+
             !$acc loop vector
-            do k=1,nVertLevels
+            do k=2,nVertLevels-1
                ! Lower, main, and upper diagonals of 1D column Laplacian
                idiag_lowr(k) = 0.0_RKIND + dt * turb_imp(k) * rdzw(k)
                idiag_main(k) = 1.0_RKIND - dt * (turb_imp(k+1) + &
@@ -1624,7 +1636,7 @@ contains
                tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + dqdt_imp(k)
 
                ! Debug difference between exp and imp estimates
-               print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
+               !print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
             end do
             
             !$acc loop vector
