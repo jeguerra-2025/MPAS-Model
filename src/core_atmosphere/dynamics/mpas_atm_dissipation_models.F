@@ -1015,15 +1015,21 @@ contains
 
       ! local variables
 
-      integer :: cell1, cell2, iEdge, iCell, i, k, kdiag
+      integer :: cell1, cell2, iEdge, iCell, i, k
       real (kind=RKIND) :: r_areaCell, edge_sign, w_turb_flux
 
       ! Insert column variables for implicit tridiagonal system (3 column arrays)
       real (kind=RKIND), intent(in) :: dt
-      real (kind=RKIND), dimension(nVertLevels) :: idiag_lowr
-      real (kind=RKIND), dimension(nVertLevels) :: idiag_main
-      real (kind=RKIND), dimension(nVertLevels) :: idiag_uppr
-      real (kind=RKIND), dimension(nVertLevels) :: qc_new ! locally updated generic center quantity per column
+      real (kind=RKIND) :: delta_w
+      real (kind=RKIND) :: dqdt_imp
+      real (kind=RKIND), dimension(nVertLevels+1) :: turb_vimp
+      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_lowr
+      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_main
+      real (kind=RKIND), dimension(nVertLevels+1) :: idiag_uppr
+      real (kind=RKIND), dimension(nVertLevels+1) :: dv_rhs
+      real (kind=RKIND), dimension(nVertLevels+1) :: qc_rhs
+      real (kind=RKIND), dimension(nVertLevels+1) :: qc_new ! locally updated generic center quantity per column
+      real (kind=RKIND), dimension(nVertLevels+1) :: dqdt_exp
 
 !  !OMP BARRIER  why is this openmp barrier here???
 
@@ -1141,17 +1147,58 @@ contains
      
             !$acc loop vector
             do k=1,nVertLevels
-               turb_vflux(k) = - rho_zz(k,iCell)*eddy_visc_vert(k,iCell)*zz(k,iCell)*(      &
-                                          2.0*zz(k,iCell)*rdzw(k)*(w(k+1,iCell)-w(k,iCell))  &
-                                              + divergence(k,iCell)                         )
+               delta_w = (w(k+1,iCell)-w(k,iCell))
+               turb_vflux(k) = -rho_zz(k,iCell)*eddy_visc_vert(k,iCell)*zz(k,iCell)*(      &
+                                          2.0*zz(k,iCell)*rdzw(k)*delta_w)
+               turb_vimp(k) = -rho_zz(k,iCell)*eddy_visc_vert(k,iCell)*zz(k,iCell)*        &
+                               2.0*zz(k,iCell)*rdzw(k)
+               dv_rhs(k) = -rho_zz(k,iCell)*eddy_visc_vert(k,iCell)*zz(k,iCell)*           &
+                            divergence(k,iCell)
             end do
 
             turb_vflux(nVertLevels+1) = 0.0
+            turb_vimp(nVertLevels+1) = 0.0
+
+            idiag_lowr(1) = 0.0_RKIND
+            idiag_main(1) = 1.0_RKIND
+            idiag_uppr(1) = 0.0_RKIND
+
+            dqdt_exp(1) = 0.0_RKIND
+            qc_rhs(1) = 0.0_RKIND
+            !$acc loop vector
+            do k=2,nVertLevels
+               ! Set up internal RHS
+               dqdt_exp(k) = -rdzw(k)*(turb_vflux(k) - turb_vflux(k-1))
+               qc_rhs(k) = dt * (dqdt_exp(k) + dv_rhs(k) - dv_rhs(k-1))
+
+               ! Lower, main, and upper diagonals of 1D column Laplacian
+               idiag_lowr(k) = 0.0_RKIND + dt * turb_vimp(k-1) * rdzu(k)
+               idiag_main(k) = 1.0_RKIND - dt * (turb_vimp(k) + &
+                                                 turb_vimp(k-1)) * rdzu(k)
+               idiag_uppr(k) = 0.0_RKIND + dt * turb_vimp(k) * rdzu(k)
+            end do
+            dqdt_exp(nVertLevels+1) = 0.0_RKIND
+            qc_rhs(nVertLevels+1) = 0.0_RKIND
+
+            idiag_lowr(nVertLevels+1) = 0.0_RKIND
+            idiag_main(nVertLevels+1) = 1.0_RKIND
+            idiag_uppr(nVertLevels+1) = 0.0_RKIND
+
+            ! Execute the solver for this column to get local updated state qc_new
+            call tridiag3(nVertLevels+1, idiag_lowr, &
+                          idiag_main, idiag_uppr, &
+                          qc_rhs, qc_new)
+            qc_new(1) = 0.0_RKIND
+            qc_new(nVertLevels+1) = 0.0_RKIND
 
             !$acc loop vector
             do k=2,nVertLevels
-               tend_w_euler(k,iCell) = tend_w_euler(k,iCell) &
-                                           - rdzu(k)*(turb_vflux(k)-turb_vflux(k-1))
+               ! Implicit estimate of tendency and update
+               dqdt_imp = qc_new(k) / dt
+               tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + dqdt_imp
+
+               ! Debug difference between exp and imp estimates
+               !print *, k, dqdt_exp(k), dqdt_imp, w(k,iCell)
             end do
          end do
 
@@ -1275,9 +1322,9 @@ contains
 
       ! Diagnostic/debug variables for implicit code
       real (kind=RKIND) :: delta_q
+      real (kind=RKIND) :: dqdt_imp
       real (kind=RKIND), dimension(nVertLevels) :: dqdt_exp
-      real (kind=RKIND), dimension(nVertLevels+1) :: turb_imp
-      real (kind=RKIND), dimension(nVertLevels) :: dqdt_imp
+      real (kind=RKIND), dimension(nVertLevels+1) :: turb_vimp
       real (kind=RKIND), dimension(nVertLevels) :: qc_rhs ! RHS array for theta and scalars at centers
 
       DEBUG_WRITE(' begin scalar_dissipation_3d ')
@@ -1554,7 +1601,7 @@ contains
                
                delta_q = (theta_m(k,iCell)-theta_m(k-1,iCell))
                turb_vflux(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k) * delta_q
-               turb_imp(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
+               turb_vimp(k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
             end do
 
             ! test boundary conditions for supercell and les test cases
@@ -1581,20 +1628,20 @@ contains
                moisture_flux = moisture_flux*rho_zz(1,iCell)
 
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
-               turb_imp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m_cell ! Value is NOT used
+               turb_vimp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m_cell ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
                qc_rhs(1) = dt * dqdt_exp(1)
 
                idiag_lowr(1) = 0.0_RKIND
-               idiag_main(1) = 1.0_RKIND - dt * turb_imp(2) * rdzw(1)
-               idiag_uppr(1) = 0.0_RKIND + dt * turb_imp(2) * rdzw(1)
+               idiag_main(1) = 1.0_RKIND - dt * turb_vimp(2) * rdzw(1)
+               idiag_uppr(1) = 0.0_RKIND + dt * turb_vimp(2) * rdzw(1)
 
             else
                ! Neumann BC at the ground
                turb_vflux(1) = turb_vflux(2)
-               turb_imp(1) = turb_imp(2)
+               turb_vimp(1) = turb_vimp(2)
                dqdt_exp(1) = 0.0_RKIND
-               qc_rhs(1) = 0.0_RKIND !theta_m(1,iCell)
+               qc_rhs(1) = 0.0_RKIND
 
                idiag_lowr(1) = 0.0_RKIND
                idiag_main(1) = 1.0_RKIND
@@ -1602,7 +1649,7 @@ contains
             end if
             ! Neumann BC at the model top (true in all cases)
             turb_vflux(nVertLevels+1) = turb_vflux(nVertLevels)
-            turb_imp(nVertLevels+1) = turb_imp(nVertLevels)
+            turb_vimp(nVertLevels+1) = turb_vimp(nVertLevels)
             dqdt_exp(nVertLevels) = 0.0_RKIND
             qc_rhs(nVertLevels) = 0.0_RKIND
 
@@ -1612,16 +1659,15 @@ contains
 
             !$acc loop vector
             do k=2,nVertLevels-1
-               
                ! Set up internal RHS
                dqdt_exp(k) = -rdzw(k)*(turb_vflux(k+1) - turb_vflux(k))
-               qc_rhs(k) = dt * dqdt_exp(k) !theta_m(k,iCell)
+               qc_rhs(k) = dt * dqdt_exp(k)
 
                ! Lower, main, and upper diagonals of 1D column Laplacian
-               idiag_lowr(k) = 0.0_RKIND + dt * turb_imp(k) * rdzw(k)
-               idiag_main(k) = 1.0_RKIND - dt * (turb_imp(k+1) + &
-                                                 turb_imp(k)) * rdzw(k)
-               idiag_uppr(k) = 0.0_RKIND + dt * turb_imp(k+1) * rdzw(k)
+               idiag_lowr(k) = 0.0_RKIND + dt * turb_vimp(k) * rdzw(k)
+               idiag_main(k) = 1.0_RKIND - dt * (turb_vimp(k+1) + &
+                                                 turb_vimp(k)) * rdzw(k)
+               idiag_uppr(k) = 0.0_RKIND + dt * turb_vimp(k+1) * rdzw(k)
             end do
 
             ! Execute the solver for this column to get local updated state qc_new
@@ -1633,19 +1679,12 @@ contains
             !$acc loop vector
             do k=1,nVertLevels
                ! Implicit estimate of tendency and update
-               !dqdt_imp(k) = (qc_new(k) - theta_m(k,iCell)) / dt
-               dqdt_imp(k) = qc_new(k) / dt
-               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + dqdt_imp(k)
+               dqdt_imp = qc_new(k) / dt
+               tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) + dqdt_imp
 
                ! Debug difference between exp and imp estimates
-               !print *, k, dqdt_exp(k), dqdt_imp(k), theta_m(k,iCell), qc_new(k)
+               !print *, k, dqdt_exp(k), dqdt_imp, theta_m(k,iCell)
             end do
-            
-            !$acc loop vector
-            !do k=1,nVertLevels
-            !   tend_theta_euler(k,iCell) = tend_theta_euler(k,iCell) &
-            !                               - rdzw(k)*(turb_vflux(k+1)-turb_vflux(k))
-            !end do
 
             if (mix_scalars ) then
 
