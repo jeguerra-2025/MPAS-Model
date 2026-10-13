@@ -1169,7 +1169,7 @@ contains
             do k=2,nVertLevels
                ! Set up internal RHS
                dqdt_exp(k) = -rdzw(k)*(turb_vflux(k) - turb_vflux(k-1))
-               qc_rhs(k) = dt * (dqdt_exp(k) + dv_rhs(k) - dv_rhs(k-1))
+               qc_rhs(k) = dt * dqdt_exp(k) !(dqdt_exp(k) + dv_rhs(k) - dv_rhs(k-1))
 
                ! Lower, main, and upper diagonals of 1D column Laplacian
                idiag_lowr(k) = 0.0_RKIND + dt * turb_vimp(k-1) * rdzu(k)
@@ -1194,7 +1194,7 @@ contains
             !$acc loop vector
             do k=2,nVertLevels
                ! Implicit estimate of tendency and update
-               dqdt_imp = qc_new(k) / dt
+               dqdt_imp = qc_new(k) / dt - rdzw(k)*(dv_rhs(k) - dv_rhs(k-1))
                tend_w_euler(k,iCell) = tend_w_euler(k,iCell) + dqdt_imp
 
                ! Debug difference between exp and imp estimates
