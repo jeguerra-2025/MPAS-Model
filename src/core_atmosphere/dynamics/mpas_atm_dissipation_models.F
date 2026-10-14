@@ -934,7 +934,7 @@ contains
                turb_vflux(1) = -rho_edge(1,iEdge)*config_surface_drag_coefficient*u(1,iEdge)*velocity_magnitude
                turb_vimp(1) = -rho_edge(1,iEdge)*config_surface_drag_coefficient*velocity_magnitude ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
-               qc_rhs(1) = -dt*rdzw(1)*turb_vflux(1) ! dt * dqdt_exp(1)
+               qc_rhs(1) = dt * dqdt_exp(1) !-dt*rdzw(1)*turb_vflux(1) ! dt * dqdt_exp(1)
 
                idiag_lowr(1) = 0.0_RKIND
                idiag_main(1) = 1.0_RKIND - dt * turb_vimp(2) * rdzw(1)
@@ -947,7 +947,7 @@ contains
                turb_vflux(1) = -rho_edge(1,iEdge)*ust_edge*ust_edge*(u(1,iEdge)/velocity_magnitude)
                turb_vimp(1) = -rho_edge(1,iEdge)*ust_edge*ust_edge/velocity_magnitude ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
-               qc_rhs(1) = -dt*rdzw(1)*turb_vflux(1) ! dt * dqdt_exp(1)
+               qc_rhs(1) = dt * dqdt_exp(1) !-dt*rdzw(1)*turb_vflux(1) ! dt * dqdt_exp(1)
 
                idiag_lowr(1) = 0.0_RKIND
                idiag_main(1) = 1.0_RKIND - dt * turb_vimp(2) * rdzw(1)
@@ -1697,7 +1697,7 @@ contains
                turb_vflux(1) = theta_m_flux*rho_zz(1,iCell)
                turb_vimp(1) = theta_m_flux*rho_zz(1,iCell) / theta_m_cell ! Value is NOT used
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
-               qc_rhs(1) = -dt*rdzw(1)*turb_vflux(1) ! dt * dqdt_exp(1)
+               qc_rhs(1) = dt * dqdt_exp(1) !-dt*rdzw(1)*turb_vflux(1) ! dt * dqdt_exp(1)
 
                idiag_lowr(1) = 0.0_RKIND
                idiag_main(1) = 1.0_RKIND - dt * turb_vimp(2) * rdzw(1)
