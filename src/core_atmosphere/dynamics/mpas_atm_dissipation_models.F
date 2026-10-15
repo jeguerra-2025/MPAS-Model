@@ -1325,6 +1325,9 @@ contains
       integer, intent(in) :: les_surface_opt
 
       type (MPAS_Clock_type), intent(in) :: clock
+
+      real (kind=RKIND) :: beta
+      real (kind=RKIND) :: offc
       real (kind=RKIND), intent(in) :: dt
 
       integer, dimension(nCells+1), intent(in) :: nEdgesOnCell
@@ -1632,6 +1635,8 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
+         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve
+         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
          !$acc loop gang worker private(turb_vflux, turb_vflux_scalars, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
@@ -1710,8 +1715,8 @@ contains
                qc_rhs(1) = dt * dqdt_exp(1)
 
                idiag_lowr(1) = 0.0_RKIND
-               idiag_main(1) = 1.0_RKIND - dt * turb_vimp(2) * rdzw(1)
-               idiag_uppr(1) = 0.0_RKIND + dt * turb_vimp(2) * rdzw(1)
+               idiag_main(1) = 1.0_RKIND - offc * dt * turb_vimp(2) * rdzw(1)
+               idiag_uppr(1) = 0.0_RKIND + offc * dt * turb_vimp(2) * rdzw(1)
 
             else
                ! Neumann BC at the ground
@@ -1741,10 +1746,10 @@ contains
                qc_rhs(k) = dt * dqdt_exp(k)
 
                ! Lower, main, and upper diagonals of 1D column Laplacian
-               idiag_lowr(k) = 0.0_RKIND + dt * turb_vimp(k) * rdzw(k)
-               idiag_main(k) = 1.0_RKIND - dt * (turb_vimp(k+1) + &
+               idiag_lowr(k) = 0.0_RKIND + offc * dt * turb_vimp(k) * rdzw(k)
+               idiag_main(k) = 1.0_RKIND - offc * dt * (turb_vimp(k+1) + &
                                                  turb_vimp(k)) * rdzw(k)
-               idiag_uppr(k) = 0.0_RKIND + dt * turb_vimp(k+1) * rdzw(k)
+               idiag_uppr(k) = 0.0_RKIND + offc * dt * turb_vimp(k+1) * rdzw(k)
             end do
 
             ! Execute the solver for this column to get local updated state qc_new
@@ -1804,10 +1809,10 @@ contains
                      qc_rhs_scalars(iScalar,k) = dt * dqdt_exp_scalars(iScalar,k)
 
                      ! Lower, main, and upper diagonals of 1D column Laplacian
-                     idiag_lowr_scalars(iScalar,k) = 0.0_RKIND + dt * turb_vimp_scalars(iScalar,k) * rdzw(k)
-                     idiag_main_scalars(iScalar,k) = 1.0_RKIND - dt * (turb_vimp_scalars(iScalar,k+1) + &
+                     idiag_lowr_scalars(iScalar,k) = 0.0_RKIND + offc * dt * turb_vimp_scalars(iScalar,k) * rdzw(k)
+                     idiag_main_scalars(iScalar,k) = 1.0_RKIND - offc * dt * (turb_vimp_scalars(iScalar,k+1) + &
                                                       turb_vimp_scalars(iScalar,k)) * rdzw(k)
-                     idiag_uppr_scalars(iScalar,k) = 0.0_RKIND + dt * turb_vimp_scalars(iScalar,k+1) * rdzw(k)
+                     idiag_uppr_scalars(iScalar,k) = 0.0_RKIND + offc * dt * turb_vimp_scalars(iScalar,k+1) * rdzw(k)
                   end do
                end do
 
