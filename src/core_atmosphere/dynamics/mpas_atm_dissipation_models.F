@@ -675,6 +675,8 @@ contains
       real (kind=RKIND), dimension(nVertLevels) :: qc_new ! locally updated generic center quantity per column
 
       ! Diagnostic/debug variables for implicit code
+      real (kind=RKIND) :: beta
+      real (kind=RKIND) :: offc
       real (kind=RKIND) :: delta_q
       real (kind=RKIND) :: dqdt_imp
       real (kind=RKIND), dimension(nVertLevels) :: dqdt_exp
@@ -900,6 +902,8 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
+         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
+         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
          !$acc loop gang worker private(turb_vflux)
          do iEdge=edgeSolveStart,edgeSolveEnd
@@ -924,34 +928,34 @@ contains
 
                ! Compute explicit and implicit flux and flux coefficients
                delta_q = (u(k,iEdge)-u(k-1,iEdge))
-               turb_vflux(k) = - rho_k_at_w*zz_at_w*rdzu(k)*delta_q
                turb_vimp(k) = - rho_k_at_w*zz_at_w*rdzu(k)
+               turb_vflux(k) = turb_vimp(k)*delta_q
             end do
 
             if( les_surface_opt == LES_SURFACE_SPECIFIED ) then
                
                velocity_magnitude = sqrt(u(1,iEdge)**2 + v(1,iEdge)**2)
-               turb_vflux(1) = -rho_edge(1,iEdge)*config_surface_drag_coefficient*u(1,iEdge)*velocity_magnitude
-               turb_vimp(1) = -rho_edge(1,iEdge)*config_surface_drag_coefficient*velocity_magnitude ! Value is NOT used
+               turb_vimp(1) = -rho_edge(1,iEdge)*config_surface_drag_coefficient*velocity_magnitude
+               turb_vflux(1) = turb_vimp(1)*u(1,iEdge)
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
                qc_rhs(1) = dt * dqdt_exp(1) 
 
                idiag_lowr(1) = 0.0_RKIND
-               idiag_main(1) = 1.0_RKIND - dt * turb_vimp(2) * rdzw(1)
-               idiag_uppr(1) = 0.0_RKIND + dt * turb_vimp(2) * rdzw(1)
+               idiag_main(1) = 1.0_RKIND - offc * dt * turb_vimp(2) * rdzw(1)
+               idiag_uppr(1) = 0.0_RKIND + offc * dt * turb_vimp(2) * rdzw(1)
 
             else if ( les_surface_opt == LES_SURFACE_VARYING ) then
                
                ust_edge = 0.5*(ustm(cell1) + ustm(cell2))
                velocity_magnitude = max(sqrt(u(1,iEdge)**2 + v(1,iEdge)**2),0.1)
-               turb_vflux(1) = -rho_edge(1,iEdge)*ust_edge*ust_edge*(u(1,iEdge)/velocity_magnitude)
-               turb_vimp(1) = -rho_edge(1,iEdge)*ust_edge*ust_edge/velocity_magnitude ! Value is NOT used
+               turb_vimp(1) = -rho_edge(1,iEdge)*ust_edge*ust_edge/velocity_magnitude
+               turb_vflux(1) = turb_vimp(1)*u(1,iEdge)
                dqdt_exp(1) = -rdzw(1)*(turb_vflux(2) - turb_vflux(1))
                qc_rhs(1) = dt * dqdt_exp(1) 
 
                idiag_lowr(1) = 0.0_RKIND
-               idiag_main(1) = 1.0_RKIND - dt * turb_vimp(2) * rdzw(1)
-               idiag_uppr(1) = 0.0_RKIND + dt * turb_vimp(2) * rdzw(1)
+               idiag_main(1) = 1.0_RKIND - offc * dt * turb_vimp(2) * rdzw(1)
+               idiag_uppr(1) = 0.0_RKIND + offc * dt * turb_vimp(2) * rdzw(1)
                ! end test conditions
 
             else
@@ -984,10 +988,10 @@ contains
                qc_rhs(k) = dt * dqdt_exp(k)
 
                ! Lower, main, and upper diagonals of 1D column Laplacian
-               idiag_lowr(k) = 0.0_RKIND + dt * turb_vimp(k) * rdzw(k)
-               idiag_main(k) = 1.0_RKIND - dt * (turb_vimp(k+1) + &
+               idiag_lowr(k) = 0.0_RKIND + offc * dt * turb_vimp(k) * rdzw(k)
+               idiag_main(k) = 1.0_RKIND - offc * dt * (turb_vimp(k+1) + &
                                                  turb_vimp(k)) * rdzw(k)
-               idiag_uppr(k) = 0.0_RKIND + dt * turb_vimp(k+1) * rdzw(k)
+               idiag_uppr(k) = 0.0_RKIND + offc * dt * turb_vimp(k+1) * rdzw(k)
             end do
 
             ! Execute the solver for this column to get local updated state qc_new
@@ -1086,6 +1090,8 @@ contains
       real (kind=RKIND) :: r_areaCell, edge_sign, w_turb_flux
 
       ! Insert column variables for implicit tridiagonal system (3 column arrays)
+      real (kind=RKIND) :: beta
+      real (kind=RKIND) :: offc
       real (kind=RKIND), intent(in) :: dt
       real (kind=RKIND) :: delta_w
       real (kind=RKIND) :: dqdt_imp
@@ -1207,6 +1213,8 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
+         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
+         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
          !$acc loop gang worker private(turb_vflux)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
@@ -1236,13 +1244,14 @@ contains
             do k=2,nVertLevels
                ! Set up internal RHS
                dqdt_exp(k) = -rdzw(k)*(turb_vflux(k) - turb_vflux(k-1))
+               ! Divergence terms assumed explicit (matches baseline explicit result best)
                qc_rhs(k) = dt * dqdt_exp(k) !(dqdt_exp(k) + dv_rhs(k) - dv_rhs(k-1))
 
                ! Lower, main, and upper diagonals of 1D column Laplacian
-               idiag_lowr(k) = 0.0_RKIND + dt * turb_vimp(k-1) * rdzu(k)
-               idiag_main(k) = 1.0_RKIND - dt * (turb_vimp(k) + &
+               idiag_lowr(k) = 0.0_RKIND + offc * dt * turb_vimp(k-1) * rdzu(k)
+               idiag_main(k) = 1.0_RKIND - offc * dt * (turb_vimp(k) + &
                                                  turb_vimp(k-1)) * rdzu(k)
-               idiag_uppr(k) = 0.0_RKIND + dt * turb_vimp(k) * rdzu(k)
+               idiag_uppr(k) = 0.0_RKIND + offc * dt * turb_vimp(k) * rdzu(k)
             end do
             dqdt_exp(nVertLevels+1) = 0.0_RKIND
             qc_rhs(nVertLevels+1) = 0.0_RKIND
@@ -1635,7 +1644,7 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
-         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve
+         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
          offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
          !$acc loop gang worker private(turb_vflux, turb_vflux_scalars, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
