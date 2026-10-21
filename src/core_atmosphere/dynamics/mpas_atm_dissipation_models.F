@@ -905,7 +905,7 @@ contains
          beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
          offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
-         !$acc loop gang worker private(turb_vflux)
+         !$acc loop gang worker private(turb_vflux, turb_vimp)
          do iEdge=edgeSolveStart,edgeSolveEnd
 
             cell1 = cellsOnEdge(1,iEdge)
@@ -1216,7 +1216,7 @@ contains
          beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
          offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
-         !$acc loop gang worker private(turb_vflux)
+         !$acc loop gang worker private(turb_vflux, turb_vimp)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
             ! compute turbulent fluxes
      
@@ -1647,7 +1647,7 @@ contains
          beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
          offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
-         !$acc loop gang worker private(turb_vflux, turb_vflux_scalars, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
+         !$acc loop gang worker private(turb_vflux, turb_vflux_scalars, turb_vimp, turb_vimp_scalars, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
             ! compute turbulent fluxes
 
@@ -1826,6 +1826,7 @@ contains
                end do
 
                !$acc loop vector
+               ! vector loop may have to be gang or worker here
                do iScalar=1,num_scalars
                   ! Execute the solver for this column to get local updated state qc_new
                   call tridiag3(nVertLevels, idiag_lowr_scalars(iScalar,:), &
@@ -1867,7 +1868,6 @@ contains
       !  ld(*) lower diagonal (Ai,i-1)                                                                  
       !  md(*) principal diagonal (Ai,i)                                                                
       !  ud(*) upper diagonal (Ai,i+1)                                                                  
-      !  d     
       !  iEdge edge index from calling routine                                                                                           
       ! Output                                                                                           
       !  x     results                                                                                   
@@ -1893,8 +1893,6 @@ contains
       do k=kts,kte
          x(k)=rhs(k)/md(k)
       enddo
-
-      DEBUG_WRITE(' exiting tridiagonal solver for vertical dissipation ')
    end subroutine tridiag3
 !-----------
 
