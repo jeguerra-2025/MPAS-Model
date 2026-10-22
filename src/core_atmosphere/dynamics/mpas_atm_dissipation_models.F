@@ -1833,7 +1833,7 @@ contains
                                  idiag_main_scalars(iScalar,:), &
                                  idiag_uppr_scalars(iScalar,:), &
                                  qc_rhs_scalars(iScalar,:), qc_new_scalars(iScalar,:))
-                  !qc_new(nVertLevels) = 0.0_RKIND
+                  qc_new_scalars(iScalar,nVertLevels) = 0.0_RKIND
                end do
 
                !$acc loop vector collapse(2)
