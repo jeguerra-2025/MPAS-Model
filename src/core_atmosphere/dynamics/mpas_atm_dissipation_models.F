@@ -905,7 +905,7 @@ contains
          beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
          offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
-         !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, idiag_lowr, idiag_main, idiag_uppr)
+         !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr)
          do iEdge=edgeSolveStart,edgeSolveEnd
 
             cell1 = cellsOnEdge(1,iEdge)
@@ -1216,7 +1216,7 @@ contains
          beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
          offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
-         !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, idiag_lowr, idiag_main, idiag_uppr)
+         !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
             ! compute turbulent fluxes
      
@@ -1647,7 +1647,7 @@ contains
          beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
          offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
-         !$acc loop gang worker private(turb_vflux, turb_vflux_scalars, turb_vimp, turb_vimp_scalars, dqdt_exp, qc_rhs, idiag_lowr, idiag_main, idiag_uppr, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
+         !$acc loop gang worker private(turb_vflux, turb_vflux_scalars, turb_vimp, turb_vimp_scalars, dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
             ! compute turbulent fluxes
 
