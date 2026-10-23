@@ -1825,8 +1825,8 @@ contains
                   end do
                end do
 
-               !$acc loop vector
-               ! vector loop may have to be gang or worker here
+               !NOT-$acc loop vector
+               ! TODO: vector loop may have to be gang or worker here
                do iScalar=1,num_scalars
                   ! Execute the solver for this column to get local updated state qc_new
                   call tridiag3(nVertLevels, idiag_lowr_scalars(iScalar,:), &
