@@ -1651,8 +1651,9 @@ contains
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
             ! compute turbulent fluxes
 
-            !turb_vflux(nVertlevels+1) = 0.  !  no turbulent flux out of the domain
-            !turb_vflux(1) = 0.  !  lower bc flux handled where ???
+            prandtl_1d_inverse(1) = 0.0_RKIND
+            rho_k_at_w(1) = 0.0_RKIND
+            zz_at_w(1) = 0.0_RKIND
 
             if ( les_model_opt == LES_MODEL_3D_SMAGORINSKY ) then
                !$acc loop vector
@@ -1726,7 +1727,6 @@ contains
                idiag_lowr(1) = 0.0_RKIND
                idiag_main(1) = 1.0_RKIND - offc * dt * turb_vimp(2) * rdzw(1)
                idiag_uppr(1) = 0.0_RKIND + offc * dt * turb_vimp(2) * rdzw(1)
-
             else
                ! Neumann BC at the ground
                turb_vimp(1) = turb_vimp(2)
