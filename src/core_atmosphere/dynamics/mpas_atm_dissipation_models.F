@@ -1825,8 +1825,7 @@ contains
                   end do
                end do
 
-               !NOT-$acc loop vector
-               ! TODO: vector loop may have to be gang or worker here
+               !$acc parallel loop
                do iScalar=1,num_scalars
                   ! Execute the solver for this column to get local updated state qc_new
                   call tridiag3(nVertLevels, idiag_lowr_scalars(iScalar,:), &
@@ -1872,6 +1871,8 @@ contains
       ! Output                                                                                           
       !  x     results                                                                                   
       !ccccccccccccccccccccccccccccccc                                                                   
+      
+      !$acc routine seq 
 
       implicit none
       integer,intent(in)   :: kte
