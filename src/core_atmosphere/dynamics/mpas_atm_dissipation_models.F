@@ -1825,7 +1825,7 @@ contains
                   end do
                end do
 
-               !NOT-$acc parallel loop
+               !$acc parallel loop
                do iScalar=1,num_scalars
                   ! Execute the solver for this column to get local updated state qc_new
                   call tridiag3(nVertLevels, idiag_lowr_scalars(iScalar,:), &
@@ -1882,18 +1882,22 @@ contains
       real(kind=RKIND), dimension(kte), intent(out) :: x
       integer :: k
 
+      !$acc loop seq
       do k=kte-1,kts,-1
          rhs(k)=rhs(k)-ud(k)*rhs(k+1)/md(k+1)
          md(k)=md(k)-ud(k)*ld(k+1)/md(k+1)
       enddo
 
+      !$acc loop seq
       do k=kts+1,kte
          rhs(k)=rhs(k)-ld(k)*rhs(k-1)/md(k-1)
       enddo
-
+!DIR$ IVDEP
+      !$acc loop vector
       do k=kts,kte
          x(k)=rhs(k)/md(k)
       enddo
+
    end subroutine tridiag3
 !-----------
 
