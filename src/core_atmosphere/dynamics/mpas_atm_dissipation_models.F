@@ -902,11 +902,11 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
-         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
-         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
-
          !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr)
          do iEdge=edgeSolveStart,edgeSolveEnd
+
+            beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
+            offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient 
 
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
@@ -1213,11 +1213,12 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
-         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
-         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
-
          !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, dv_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
+            
+            beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
+            offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
+            
             ! compute turbulent fluxes
      
             !$acc loop vector
@@ -1644,13 +1645,13 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
-         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
-         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
-
          !$acc loop gang worker private(turb_vflux, turb_vflux_scalars, turb_vimp, turb_vimp_scalars, dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr, dqdt_exp_scalars, qc_rhs_scalars, qc_new_scalars, idiag_lowr_scalars, idiag_main_scalars, idiag_uppr_scalars, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
-            ! compute turbulent fluxes
+            
+            beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
+            offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
+            ! compute turbulent fluxes
             prandtl_1d_inverse(1) = 0.0_RKIND
             rho_k_at_w(1) = 0.0_RKIND
             zz_at_w(1) = 0.0_RKIND
@@ -1825,7 +1826,7 @@ contains
                   end do
                end do
 
-               !$acc parallel loop
+               !$acc loop seq
                do iScalar=1,num_scalars
                   ! Execute the solver for this column to get local updated state qc_new
                   call tridiag3(nVertLevels, idiag_lowr_scalars(iScalar,:), &
