@@ -1796,6 +1796,8 @@ contains
                   turb_vflux_scalars(1,iScalar) = 0.0_RKIND  !  lower bc flux handled where ???
                end do
 
+               rho_k_at_w(1) = 0.0_RKIND
+               zz_at_w(1) = 0.0_RKIND
                !$acc loop vector
                do k=2,nVertLevels
                   rho_k_at_w(k) = fzm(k)*rho_zz(k  ,iCell)*zz(k  ,iCell)*zz(k  ,iCell)*eddy_visc_vert(k  ,iCell) &
