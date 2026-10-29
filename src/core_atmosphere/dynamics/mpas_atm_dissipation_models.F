@@ -1705,8 +1705,8 @@ contains
                   moisture_flux = config_surface_moisture_flux
                   heat_flux = config_surface_heat_flux
 
-!                 place holder routine for time-varying specified
-!                 call flux_les_sas( heat_flux, moisture_flux, clock, dt )
+                 !place holder routine for time-varying specified
+                 !call flux_les_sas( heat_flux, moisture_flux, clock, dt )
 
                else if ( les_surface_opt == LES_SURFACE_VARYING ) then
                   heat_flux = hfx(iCell)/rho_zz(1,iCell)/cp
@@ -1778,6 +1778,7 @@ contains
                !print *, k, dqdt_exp(k), dqdt_imp, theta_m(k,iCell)
             end do
          end do ! loop over cells parallel region for theta
+         !$acc end parallel
 
          if (mix_scalars ) then
             !$acc parallel default(present)
@@ -1806,8 +1807,8 @@ contains
                end do
 
                !$acc loop vector collapse(2)
-               do iScalar=1,num_scalars
-                  do k=2,nVertLevels
+               do k=2,nVertLevels
+                  do iScalar=1,num_scalars
                      delta_q = (scalars(iScalar,k,iCell)-scalars(iScalar,k-1,iCell))
                      turb_vimp_scalars(k,iScalar) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
                      turb_vflux_scalars(k,iScalar) = turb_vimp_scalars(k,iScalar) * delta_q
@@ -1820,8 +1821,8 @@ contains
                end if
 
                !$acc loop vector collapse(2)
-               do iScalar=1,num_scalars
-                  do k=1,nVertLevels
+               do k=1,nVertLevels
+                  do iScalar=1,num_scalars
                      ! Set up internal RHS
                      dqdt_exp_scalars(k,iScalar) = -rdzw(k)*(turb_vflux_scalars(k,iScalar+1) - &
                                                    turb_vflux_scalars(k,iScalar))
@@ -1846,17 +1847,15 @@ contains
                end do
 
                !$acc loop vector collapse(2)
-               do iScalar=1,num_scalars
-                  do k=1,nVertLevels
+               do k=1,nVertLevels
+                  do iScalar=1,num_scalars
                      dqdt_imp = qc_new_scalars(k,iScalar) / dt
                      tend_scalars(iScalar,k,iCell) = tend_scalars(iScalar,k,iCell) + dqdt_imp
                   end do
                end do
             end do  ! loop over cells parallel region for scalars
+            !$acc end parallel
          end if ! mix scalars
-
-         !$acc end parallel
-
       end if
 
       !$acc exit data delete(turb_vflux_scalars)
