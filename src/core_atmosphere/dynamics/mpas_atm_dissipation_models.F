@@ -692,8 +692,9 @@ contains
       ! del^4 horizontal filter.  We compute this as del^2 ( del^2 (u) ).
       ! First, storage to hold the result from the first del^2 computation.
 
-      !$acc enter data create(u_mix)
-      !$acc enter data create(turb_vflux)
+      !$acc enter data create(u_mix, turb_vflux, turb_vimp)
+      !$acc enter data create(idiag_lowr, idiag_main, idiag_uppr)
+      !$acc enter data create(dv_rhs, qc_rhs, qc_new, dqdt_exp)
 
       !$acc parallel default(present)
 
@@ -1016,8 +1017,9 @@ contains
 
       end if
 
-      !$acc exit data delete(turb_vflux)
-      !$acc exit data delete(u_mix)
+      !$acc exit data delete(u_mix, turb_vflux, turb_vimp)
+      !$acc exit data delete(idiag_lowr, idiag_main, idiag_uppr)
+      !$acc exit data delete(dv_rhs, qc_rhs, qc_new, dqdt_exp)
 
       DEBUG_WRITE(' exiting u_dissipation_3d ')
 
