@@ -902,11 +902,11 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
+         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
+         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
+
          !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr)
          do iEdge=edgeSolveStart,edgeSolveEnd
-
-            beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
-            offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient 
 
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
@@ -1213,12 +1213,11 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
+         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
+         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
+
          !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, dv_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr)
          do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
-            
-            beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
-            offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
-            
             ! compute turbulent fluxes
      
             !$acc loop vector
@@ -1413,7 +1412,7 @@ contains
       real (kind=RKIND), dimension(nVertLevels,num_scalars) :: qc_new_scalars ! locally updated generic center quantity per column
 
       ! Diagnostic/debug variables for implicit code
-      real (kind=RKIND), dimension(nVertLevels+1,num_scalars) :: turb_vimp_scalars, turb_vflux_scalars
+      real (kind=RKIND), dimension(nVertLevels,num_scalars+1) :: turb_vimp_scalars, turb_vflux_scalars
       real (kind=RKIND), dimension(nVertLevels,num_scalars) :: dqdt_exp_scalars
       real (kind=RKIND), dimension(nVertLevels,num_scalars) :: qc_rhs_scalars ! RHS array for scalars at centers
 
@@ -1645,13 +1644,13 @@ contains
       if ( les_model_opt /= LES_MODEL_NONE ) then
 
          !$acc parallel default(present)
-         !$acc loop gang worker private(turb_vflux, turb_vimp, dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
-         do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
-            
-            beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
-            offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
+         beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
+         offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
+         !$acc loop gang worker private(turb_vflux, turb_vflux_scalars, turb_vimp, turb_vimp_scalars, dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr, dqdt_exp_scalars, qc_rhs_scalars, qc_new_scalars, idiag_lowr_scalars, idiag_main_scalars, idiag_uppr_scalars, prandtl_1d_inverse, rho_k_at_w, zz_at_w)
+         do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
             ! compute turbulent fluxes
+
             prandtl_1d_inverse(1) = 0.0_RKIND
             rho_k_at_w(1) = 0.0_RKIND
             zz_at_w(1) = 0.0_RKIND
@@ -1705,8 +1704,8 @@ contains
                   moisture_flux = config_surface_moisture_flux
                   heat_flux = config_surface_heat_flux
 
-                 !place holder routine for time-varying specified
-                 !call flux_les_sas( heat_flux, moisture_flux, clock, dt )
+!                 place holder routine for time-varying specified
+!                 call flux_les_sas( heat_flux, moisture_flux, clock, dt )
 
                else if ( les_surface_opt == LES_SURFACE_VARYING ) then
                   heat_flux = hfx(iCell)/rho_zz(1,iCell)/cp
@@ -1777,16 +1776,8 @@ contains
                ! Debug difference between exp and imp estimates
                !print *, k, dqdt_exp(k), dqdt_imp, theta_m(k,iCell)
             end do
-         end do ! loop over cells parallel region for theta
-         !$acc end parallel
 
-         if (mix_scalars ) then
-            !$acc parallel default(present)
-            !$acc loop gang worker private(turb_vimp_scalars, dqdt_exp_scalars, qc_rhs_scalars, qc_new_scalars, idiag_lowr_scalars, idiag_main_scalars, idiag_uppr_scalars, rho_k_at_w, zz_at_w)
-            do iCell = cellSolveStart,cellSolveEnd ! vertical mixing for each column
-               
-               beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
-               offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
+            if (mix_scalars ) then
 
                ! compute turbulent fluxes
                !$acc loop vector
@@ -1797,12 +1788,10 @@ contains
                   turb_vflux_scalars(1,iScalar) = 0.0_RKIND  !  lower bc flux handled where ???
                end do
 
-               rho_k_at_w(1) = 0.0_RKIND
-               zz_at_w(1) = 0.0_RKIND
                !$acc loop vector
                do k=2,nVertLevels
                   rho_k_at_w(k) = fzm(k)*rho_zz(k  ,iCell)*zz(k  ,iCell)*zz(k  ,iCell)*eddy_visc_vert(k  ,iCell) &
-                              + fzp(k)*rho_zz(k-1,iCell)*zz(k-1,iCell)*zz(k-1,iCell)*eddy_visc_vert(k-1,iCell)
+                                + fzp(k)*rho_zz(k-1,iCell)*zz(k-1,iCell)*zz(k-1,iCell)*eddy_visc_vert(k-1,iCell)
                   zz_at_w(k) = fzm(k)*zz(k,iCell)+fzp(k)*zz(k-1,iCell)
                end do
 
@@ -1824,15 +1813,15 @@ contains
                do k=1,nVertLevels
                   do iScalar=1,num_scalars
                      ! Set up internal RHS
-                     dqdt_exp_scalars(k,iScalar) = -rdzw(k)*(turb_vflux_scalars(k,iScalar+1) - &
+                     dqdt_exp_scalars(k,iScalar) = -rdzw(k)*(turb_vflux_scalars(k+1,iScalar) - &
                                                    turb_vflux_scalars(k,iScalar))
                      qc_rhs_scalars(k,iScalar) = dt * dqdt_exp_scalars(k,iScalar)
 
                      ! Lower, main, and upper diagonals of 1D column Laplacian
                      idiag_lowr_scalars(k,iScalar) = 0.0_RKIND + offc * dt * turb_vimp_scalars(k,iScalar) * rdzw(k)
-                     idiag_main_scalars(k,iScalar) = 1.0_RKIND - offc * dt * (turb_vimp_scalars(k,iScalar+1) + &
+                     idiag_main_scalars(k,iScalar) = 1.0_RKIND - offc * dt * (turb_vimp_scalars(k+1,iScalar) + &
                                                       turb_vimp_scalars(k,iScalar)) * rdzw(k)
-                     idiag_uppr_scalars(k,iScalar) = 0.0_RKIND + offc * dt * turb_vimp_scalars(k,iScalar+1) * rdzw(k)
+                     idiag_uppr_scalars(k,iScalar) = 0.0_RKIND + offc * dt * turb_vimp_scalars(k+1,iScalar) * rdzw(k)
                   end do
                end do
 
@@ -1853,9 +1842,13 @@ contains
                      tend_scalars(iScalar,k,iCell) = tend_scalars(iScalar,k,iCell) + dqdt_imp
                   end do
                end do
-            end do  ! loop over cells parallel region for scalars
-            !$acc end parallel
-         end if ! mix scalars
+
+            end if ! mix scalars
+
+         end do  ! loop over cells (columns)
+
+         !$acc end parallel
+
       end if
 
       !$acc exit data delete(turb_vflux_scalars)
