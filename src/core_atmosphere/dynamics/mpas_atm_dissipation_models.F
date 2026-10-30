@@ -1387,7 +1387,6 @@ contains
       real (kind=RKIND) :: z1, z2, z3, z4, zm, z0, zp
       real (kind=RKIND), dimension(nVertLevels) :: t_mix
       real (kind=RKIND), dimension(nVertLevels+1) :: prandtl_1d_inverse, turb_vimp, turb_vflux
-      real (kind=RKIND), dimension(num_scalars,nVertLevels+1) :: turb_vimp_scalars, turb_vflux_scalars
       real (kind=RKIND), dimension(nVertLevels) :: rho_k_at_w, zz_at_w
 
       real (kind=RKIND) :: moisture_flux, heat_flux, theta_m_flux, surf_factor
@@ -1407,14 +1406,15 @@ contains
       real (kind=RKIND), dimension(nVertLevels) :: qc_rhs ! RHS array for theta at centers
 
       ! Insert column variables for implicit tridiagonal system (3 column arrays)
-      real (kind=RKIND), dimension(num_scalars,nVertLevels) :: idiag_lowr_scalars
-      real (kind=RKIND), dimension(num_scalars,nVertLevels) :: idiag_main_scalars
-      real (kind=RKIND), dimension(num_scalars,nVertLevels) :: idiag_uppr_scalars
-      real (kind=RKIND), dimension(num_scalars,nVertLevels) :: qc_new_scalars ! locally updated generic center quantity per column
+      real (kind=RKIND), dimension(nVertLevels,num_scalars) :: idiag_lowr_scalars
+      real (kind=RKIND), dimension(nVertLevels,num_scalars) :: idiag_main_scalars
+      real (kind=RKIND), dimension(nVertLevels,num_scalars) :: idiag_uppr_scalars
+      real (kind=RKIND), dimension(nVertLevels,num_scalars) :: qc_new_scalars ! locally updated generic center quantity per column
 
       ! Diagnostic/debug variables for implicit code
-      real (kind=RKIND), dimension(num_scalars,nVertLevels) :: dqdt_exp_scalars
-      real (kind=RKIND), dimension(num_scalars,nVertLevels) :: qc_rhs_scalars ! RHS array for scalars at centers
+      real (kind=RKIND), dimension(nVertLevels,num_scalars+1) :: turb_vimp_scalars, turb_vflux_scalars
+      real (kind=RKIND), dimension(nVertLevels,num_scalars) :: dqdt_exp_scalars
+      real (kind=RKIND), dimension(nVertLevels,num_scalars) :: qc_rhs_scalars ! RHS array for scalars at centers
 
       DEBUG_WRITE(' begin scalar_dissipation_3d ')
       DEBUG_WRITE(' 4th order hyperviscosity is $r ' COMMA realArgs=(/h_theta_eddy_visc4/))
@@ -1782,10 +1782,10 @@ contains
                ! compute turbulent fluxes
                !$acc loop vector
                do iScalar=1,num_scalars
-                  turb_vimp_scalars(iScalar,nVertlevels+1) = 0.0_RKIND  !  no turbulent flux out of the domain
-                  turb_vimp_scalars(iScalar,1) = 0.0_RKIND  !  lower bc flux handled where ???
-                  turb_vflux_scalars(iScalar,nVertlevels+1) = 0.0_RKIND  !  no turbulent flux out of the domain
-                  turb_vflux_scalars(iScalar,1) = 0.0_RKIND  !  lower bc flux handled where ???
+                  turb_vimp_scalars(nVertlevels+1,iScalar) = 0.0_RKIND  !  no turbulent flux out of the domain
+                  turb_vimp_scalars(1,iScalar) = 0.0_RKIND  !  lower bc flux handled where ???
+                  turb_vflux_scalars(nVertlevels+1,iScalar) = 0.0_RKIND  !  no turbulent flux out of the domain
+                  turb_vflux_scalars(1,iScalar) = 0.0_RKIND  !  lower bc flux handled where ???
                end do
 
                !$acc loop vector
@@ -1799,46 +1799,46 @@ contains
                do k=2,nVertLevels
                   do iScalar=1,num_scalars
                      delta_q = (scalars(iScalar,k,iCell)-scalars(iScalar,k-1,iCell))
-                     turb_vimp_scalars(iScalar,k) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
-                     turb_vflux_scalars(iScalar,k) = turb_vimp_scalars(iScalar,k) * delta_q
+                     turb_vimp_scalars(k,iScalar) = - prandtl_1d_inverse(k)*rho_k_at_w(k)*zz_at_w(k)*rdzu(k)
+                     turb_vflux_scalars(k,iScalar) = turb_vimp_scalars(k,iScalar) * delta_q
                   end do
                end do
 
                if( les_surface_opt == LES_SURFACE_SPECIFIED .or. les_surface_opt == LES_SURFACE_VARYING ) then
-                  turb_vflux_scalars(index_qv,1) = moisture_flux ! lower b.c. for qv
-                  turb_vimp_scalars(index_qv,1) = 0.0_RKIND
+                  turb_vflux_scalars(1,index_qv) = moisture_flux ! lower b.c. for qv
+                  turb_vimp_scalars(1,index_qv) = 0.0_RKIND
                end if
 
                !$acc loop vector collapse(2)
                do k=1,nVertLevels
                   do iScalar=1,num_scalars
                      ! Set up internal RHS
-                     dqdt_exp_scalars(iScalar,k) = -rdzw(k)*(turb_vflux_scalars(iScalar,k+1) - &
-                                                   turb_vflux_scalars(iScalar,k))
-                     qc_rhs_scalars(iScalar,k) = dt * dqdt_exp_scalars(iScalar,k)
+                     dqdt_exp_scalars(k,iScalar) = -rdzw(k)*(turb_vflux_scalars(k+1,iScalar) - &
+                                                   turb_vflux_scalars(k,iScalar))
+                     qc_rhs_scalars(k,iScalar) = dt * dqdt_exp_scalars(k,iScalar)
 
                      ! Lower, main, and upper diagonals of 1D column Laplacian
-                     idiag_lowr_scalars(iScalar,k) = 0.0_RKIND + offc * dt * turb_vimp_scalars(iScalar,k) * rdzw(k)
-                     idiag_main_scalars(iScalar,k) = 1.0_RKIND - offc * dt * (turb_vimp_scalars(iScalar,k+1) + &
-                                                      turb_vimp_scalars(iScalar,k)) * rdzw(k)
-                     idiag_uppr_scalars(iScalar,k) = 0.0_RKIND + offc * dt * turb_vimp_scalars(iScalar,k+1) * rdzw(k)
+                     idiag_lowr_scalars(k,iScalar) = 0.0_RKIND + offc * dt * turb_vimp_scalars(k,iScalar) * rdzw(k)
+                     idiag_main_scalars(k,iScalar) = 1.0_RKIND - offc * dt * (turb_vimp_scalars(k+1,iScalar) + &
+                                                      turb_vimp_scalars(k,iScalar)) * rdzw(k)
+                     idiag_uppr_scalars(k,iScalar) = 0.0_RKIND + offc * dt * turb_vimp_scalars(k+1,iScalar) * rdzw(k)
                   end do
                end do
 
-               !$acc parallel loop
+               !$acc loop vector
                do iScalar=1,num_scalars
                   ! Execute the solver for this column to get local updated state qc_new
-                  call tridiag3(nVertLevels, idiag_lowr_scalars(iScalar,:), &
-                                 idiag_main_scalars(iScalar,:), &
-                                 idiag_uppr_scalars(iScalar,:), &
-                                 qc_rhs_scalars(iScalar,:), qc_new_scalars(iScalar,:))
-                  qc_new_scalars(iScalar,nVertLevels) = 0.0_RKIND
+                  call tridiag3(nVertLevels, idiag_lowr_scalars(:,iScalar), &
+                                 idiag_main_scalars(:,iScalar), &
+                                 idiag_uppr_scalars(:,iScalar), &
+                                 qc_rhs_scalars(:,iScalar), qc_new_scalars(:,iScalar))
+                  qc_new_scalars(nVertLevels,iScalar) = 0.0_RKIND
                end do
 
                !$acc loop vector collapse(2)
                do k=1,nVertLevels
                   do iScalar=1,num_scalars
-                     dqdt_imp = qc_new_scalars(iScalar,k) / dt
+                     dqdt_imp = qc_new_scalars(k,iScalar) / dt
                      tend_scalars(iScalar,k,iCell) = tend_scalars(iScalar,k,iCell) + dqdt_imp
                   end do
                end do
@@ -1893,7 +1893,7 @@ contains
          rhs(k)=rhs(k)-ld(k)*rhs(k-1)/md(k-1)
       enddo
 !DIR$ IVDEP
-      !$acc loop vector
+      !$acc loop seq
       do k=kts,kte
          x(k)=rhs(k)/md(k)
       enddo
