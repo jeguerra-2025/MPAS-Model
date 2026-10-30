@@ -1388,6 +1388,7 @@ contains
       real (kind=RKIND), dimension(nVertLevels) :: t_mix
       real (kind=RKIND), dimension(nVertLevels+1) :: prandtl_1d_inverse, turb_vimp, turb_vflux
       real (kind=RKIND), dimension(nVertLevels) :: rho_k_at_w, zz_at_w
+      real (kind=RKIND), dimension(nVertLevels,num_scalars+1) :: turb_vimp_scalars, turb_vflux_scalars
 
       real (kind=RKIND) :: moisture_flux, heat_flux, theta_m_flux, surf_factor
       real (kind=RKIND) :: qv_cell, theta_m_cell, theta_cell
@@ -1412,7 +1413,6 @@ contains
       real (kind=RKIND), dimension(nVertLevels,num_scalars) :: qc_new_scalars ! locally updated generic center quantity per column
 
       ! Diagnostic/debug variables for implicit code
-      real (kind=RKIND), dimension(nVertLevels,num_scalars+1) :: turb_vimp_scalars, turb_vflux_scalars
       real (kind=RKIND), dimension(nVertLevels,num_scalars) :: dqdt_exp_scalars
       real (kind=RKIND), dimension(nVertLevels,num_scalars) :: qc_rhs_scalars ! RHS array for scalars at centers
 
@@ -1421,10 +1421,12 @@ contains
 
       if( mix_scalars .and. (dynamics_substep == 1)) call mpas_log_write(' scalar mixing on ')
 
-      !$acc enter data create(turb_vflux_scalars, turb_vimp_scalars)
-      !$acc enter data create(idiag_lowr,idiag_main,idiag_uppr)
-      !$acc enter data create(idiag_lowr_scalars,idiag_main_scalars,idiag_uppr_scalars)
       !$acc enter data create(turb_vflux, turb_vimp, prandtl_1d_inverse)
+      !$acc enter data create(idiag_lowr,idiag_main,idiag_uppr)
+      !$acc enter data create(qc_rhs, qc_new, dqdt_exp)
+      !$acc enter data create(turb_vflux_scalars, turb_vimp_scalars)
+      !$acc enter data create(qc_rhs_scalars, qc_new_scalars, dqdt_exp_scalars)
+      !$acc enter data create(idiag_lowr_scalars,idiag_main_scalars,idiag_uppr_scalars)
 
       !$acc parallel default(present)
 
@@ -1858,10 +1860,12 @@ contains
 
       end if
 
-      !$acc exit data delete(turb_vflux_scalars, turb_vimp_scalars)
-      !$acc exit data delete(idiag_lowr,idiag_main,idiag_uppr)
-      !$acc exit data delete(idiag_lowr_scalars,idiag_main_scalars,idiag_uppr_scalars)
       !$acc exit data delete(turb_vflux, turb_vimp, prandtl_1d_inverse)
+      !$acc exit data delete(idiag_lowr,idiag_main,idiag_uppr)
+      !$acc exit data delete(qc_rhs, qc_new, dqdt_exp)
+      !$acc exit data delete(turb_vflux_scalars, turb_vimp_scalars)
+      !$acc exit data delete(qc_rhs_scalars, qc_new_scalars, dqdt_exp_scalars)
+      !$acc exit data delete(idiag_lowr_scalars,idiag_main_scalars,idiag_uppr_scalars)
 
       DEBUG_WRITE(' exiting scalar_dissipation_3d ')
 
