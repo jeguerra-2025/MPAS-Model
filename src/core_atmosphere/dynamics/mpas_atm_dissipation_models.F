@@ -1019,7 +1019,7 @@ contains
 
       !$acc exit data delete(u_mix, turb_vflux, turb_vimp)
       !$acc exit data delete(idiag_lowr, idiag_main, idiag_uppr)
-      !$acc exit data delete(dv_rhs, qc_rhs, qc_new, dqdt_exp)
+      !$acc exit data delete(qc_rhs, qc_new, dqdt_exp)
 
       DEBUG_WRITE(' exiting u_dissipation_3d ')
 
