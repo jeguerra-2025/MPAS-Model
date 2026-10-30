@@ -1115,7 +1115,9 @@ contains
       DEBUG_WRITE(' begin w_dissipation_3d ')
       DEBUG_WRITE(' 4th order hyperviscosity is $r ' COMMA realArgs=(/h_mom_eddy_visc4/))
 
-      !$acc enter data create(turb_vflux)
+      !$acc enter data create(turb_vflux, turb_vimp)
+      !$acc enter data create(idiag_lowr, idiag_main, idiag_uppr)
+      !$acc enter data create(dv_rhs, qc_rhs, qc_new, dqdt_exp)
 
       !$acc parallel default(present)
 
@@ -1282,7 +1284,9 @@ contains
 
       end if
 
-      !$acc exit data delete(turb_vflux)
+      !$acc exit data delete(turb_vflux, turb_vimp)
+      !$acc exit data delete(idiag_lowr, idiag_main, idiag_uppr)
+      !$acc exit data delete(dv_rhs, qc_rhs, qc_new, dqdt_exp)
 
       DEBUG_WRITE(' exiting w_dissipation_3d ')
 
