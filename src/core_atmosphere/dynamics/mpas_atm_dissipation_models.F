@@ -694,7 +694,7 @@ contains
 
       !$acc enter data create(u_mix, turb_vflux, turb_vimp)
       !$acc enter data create(idiag_lowr, idiag_main, idiag_uppr)
-      !$acc enter data create(dv_rhs, qc_rhs, qc_new, dqdt_exp)
+      !$acc enter data create(qc_rhs, qc_new, dqdt_exp)
 
       !$acc parallel default(present)
 
