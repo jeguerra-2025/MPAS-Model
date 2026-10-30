@@ -1421,8 +1421,8 @@ contains
 
       if( mix_scalars .and. (dynamics_substep == 1)) call mpas_log_write(' scalar mixing on ')
 
-      !$acc enter data create(turb_vflux_scalars)
-      !$acc enter data create(turb_vflux, prandtl_1d_inverse)
+      !$acc enter data create(turb_vflux_scalars, turb_vimp_scalars)
+      !$acc enter data create(turb_vflux, turb_vimp, prandtl_1d_inverse)
 
       !$acc parallel default(present)
 
@@ -1647,7 +1647,7 @@ contains
          beta = 1.0_RKIND ! Parameter defines off centering of local implicit solve in [-1 +1]
          offc = 0.5_RKIND * (1.0_RKIND + beta) ! Off centering coefficient
 
-         !$acc loop gang worker 
+         !$acc loop gang worker &
          !$acc& private(turb_vflux, turb_vflux_scalars, turb_vimp, turb_vimp_scalars, &
          !$acc&         dqdt_exp, qc_rhs, qc_new, idiag_lowr, idiag_main, idiag_uppr, &
          !$acc&         dqdt_exp_scalars, qc_rhs_scalars, qc_new_scalars, &
@@ -1856,8 +1856,8 @@ contains
 
       end if
 
-      !$acc exit data delete(turb_vflux_scalars)
-      !$acc exit data delete(turb_vflux, prandtl_1d_inverse)
+      !$acc exit data delete(turb_vflux_scalars, turb_vimp_scalars)
+      !$acc exit data delete(turb_vflux, turb_vimp, prandtl_1d_inverse)
 
       DEBUG_WRITE(' exiting scalar_dissipation_3d ')
 
