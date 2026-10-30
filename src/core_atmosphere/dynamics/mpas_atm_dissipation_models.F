@@ -1422,6 +1422,8 @@ contains
       if( mix_scalars .and. (dynamics_substep == 1)) call mpas_log_write(' scalar mixing on ')
 
       !$acc enter data create(turb_vflux_scalars, turb_vimp_scalars)
+      !$acc enter data create(idiag_lowr,idiag_main,idiag_uppr)
+      !$acc enter data create(idiag_lowr_scalars,idiag_main_scalars,idiag_uppr_scalars)
       !$acc enter data create(turb_vflux, turb_vimp, prandtl_1d_inverse)
 
       !$acc parallel default(present)
@@ -1857,6 +1859,8 @@ contains
       end if
 
       !$acc exit data delete(turb_vflux_scalars, turb_vimp_scalars)
+      !$acc exit data delete(idiag_lowr,idiag_main,idiag_uppr)
+      !$acc exit data delete(idiag_lowr_scalars,idiag_main_scalars,idiag_uppr_scalars)
       !$acc exit data delete(turb_vflux, turb_vimp, prandtl_1d_inverse)
 
       DEBUG_WRITE(' exiting scalar_dissipation_3d ')
