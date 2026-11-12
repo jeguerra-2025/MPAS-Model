@@ -7596,19 +7596,20 @@ call mpas_log_write('Done with soil consistency check')
    !>
    !
    !-----------------------------------------------------------------------
-   subroutine init_atm_grad_zgrid(mesh)
-      implict none
+   subroutine init_atm_grad_zgrid(mesh, nCells, nEdges, nVertLevels)
+      implicit none
 
+      integer :: iCell, iEdge
+      integer, intent(in) :: nCells, nEdges
+      integer, intent(in) :: nVertLevels
       type (mpas_pool_type), intent(inout) :: mesh
-      integer, pointer :: nCells, nEdges, nVertLevels
       integer, dimension(:,:), pointer :: edgesOnCell, cellsOnEdge
       real (kind=RKIND), dimension(:,:), pointer :: zgrid, dzgrid_dx, dzgrid_dy
       real (kind=RKIND), dimension(:,:), pointer :: cell_gradient_coef_x, cell_gradient_coef_y
       real (kind=RKIND), dimension(:), pointer :: dcEdge, dvEdge
+      ! New array resamples zgrid to cell edges
+      real (kind=RKIND), dimension(nVertLevels+1,nEdges) :: zgrid_e
       
-      call mpas_pool_get_dimension(mesh, 'nCells', nCells)
-      call mpas_pool_get_dimension(mesh, 'nEdges', nEdges)
-      call mpas_pool_get_dimension(mesh, 'nVertLevels', nVertLevels)
       call mpas_pool_get_array(mesh, 'zgrid', zgrid)
       call mpas_pool_get_array(mesh, 'dzgrid_dx', dzgrid_dx)
       call mpas_pool_get_array(mesh, 'dzgrid_dy', dzgrid_dy)
@@ -7618,9 +7619,6 @@ call mpas_log_write('Done with soil consistency check')
       call mpas_pool_get_array(mesh, 'dcEdge', dcEdge)
       call mpas_pool_get_array(mesh, 'cellsOnEdge', cellsOnEdge)
       call mpas_pool_get_array(mesh, 'edgesOnCell', edgesOnCell)
-
-      ! New array resamples zgrid to cell edges
-      real (kind=RKIND), dimension(nVertLevels+1,nEdges) :: zgrid_e
 
       ! Compute zgrid_e from zgrid data
 
