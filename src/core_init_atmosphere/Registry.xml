@@ -1044,6 +1044,14 @@
                      description="Geometric height of layer interfaces"
                      packages="vertical_stage_out;met_stage_out"/>
 
+               <var name="dzgrid_dx" type="real" dimensions="nVertLevelsP1 nCells" units="unitless"
+                     description="X component of gradient of geometric height layer interfaces"
+                     packages="vertical_stage_out;met_stage_out"/>
+
+               <var name="dzgrid_dy" type="real" dimensions="nVertLevelsP1 nCells" units="unitless"
+                     description="Y component of gradient of geometric height layer interfaces"
+                     packages="vertical_stage_out;met_stage_out"/>
+
                 <var name="rdzw" type="real" dimensions="nVertLevels" units="unitless"
                      description="Reciprocal dzw"
                      packages="vertical_stage_out;met_stage_out"/>

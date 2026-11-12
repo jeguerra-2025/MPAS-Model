@@ -68,6 +68,7 @@ module init_atm_cases
       logical, pointer :: config_static_interp
       logical, pointer :: config_native_gwd_static
       logical, pointer :: config_native_gwd_gsl_static
+      logical, pointer :: config_vertical_grid
       logical, pointer :: config_met_interp
       logical, pointer :: config_blend_bdy_terrain
       character (len=StrKIND), pointer :: config_start_time
@@ -178,6 +179,7 @@ module init_atm_cases
             call mpas_pool_get_config(block_ptr % configs, 'config_static_interp', config_static_interp)
             call mpas_pool_get_config(block_ptr % configs, 'config_native_gwd_static', config_native_gwd_static)
             call mpas_pool_get_config(block_ptr % configs, 'config_native_gwd_gsl_static', config_native_gwd_gsl_static)
+            call mpas_pool_get_config(block_ptr % configs, 'config_vertical_grid', config_vertical_grid)
             call mpas_pool_get_config(block_ptr % configs, 'config_met_interp', config_met_interp)
             call mpas_pool_get_config(block_ptr % configs, 'config_blend_bdy_terrain', config_blend_bdy_terrain)
 
@@ -199,7 +201,7 @@ module init_atm_cases
             !     bdyMaskCell, and ter arguments are not used -- only the config_met_prefix and config_start_time
             !     arguments are used.
             !
-            if (config_blend_bdy_terrain) then
+            if (config_blend_bdy_terrain .and. config_vertical_grid) then
                 call mpas_pool_get_config(block_ptr % configs, 'config_start_time', config_start_time)
                 call mpas_pool_get_config(block_ptr % configs, 'config_met_prefix', config_met_prefix)
 
@@ -2994,6 +2996,8 @@ module init_atm_cases
       p0 = 1.e+05
 
 
+      if (config_vertical_grid) then
+
       !
       ! If requested, blend the terrain along the domain boundaries with terrain from
       ! an intermediate file. For global domains, this routine will have no effect even
@@ -3011,8 +3015,6 @@ module init_atm_cases
          end if
       end if
 
-
-      if (config_vertical_grid) then
 
       !
       ! Vertical grid setup
@@ -5623,7 +5625,7 @@ call mpas_log_write('Done with soil consistency check')
       call mpas_pool_get_dimension(dims, 'nCellsSolve', nCellsSolve)
       nVertLevelsP1 = nVertLevels + 1
 
-      call mpas_pool_get_dimension(state, 'index_qv', index_qv)
+      call mpas_pool_get_dimension(lbc_state, 'index_lbc_qv', index_qv)
 
       etavs = (1.0_RKIND - 0.252_RKIND) * pii / 2.0_RKIND
       rcv = rgas / (cp - rgas)
@@ -6265,6 +6267,7 @@ call mpas_log_write('Done with soil consistency check')
 
       real (kind=RKIND) ::  xnutr
       real (kind=RKIND) ::  ztemp, zd, zt, dz, str
+      real (kind=RKIND) ::  hm, xla, yla, xi, yi, x1, x2, y1, y2, xc, yc
 
       real (kind=RKIND), dimension(nVertLevels ) :: qvb, qvp, zg
       real (kind=RKIND), dimension(nVertLevels ) :: t_init_1d
@@ -6414,22 +6417,59 @@ call mpas_log_write('Done with soil consistency check')
 ! We may pass in an hx(:,:) that has been precomputed elsewhere.
 ! For now it is independent of k
 
-      do iCell=1,nCells
-        do k=1,nz
-          hx(k,iCell) = 0.  ! les on a flat Cartesian plane
-        end do
-      end do
-
-!      write(0,*) ' dz = ',dz
-      call mpas_log_write(' hx computation complete ')
-
       !     metrics for hybrid coordinate and vertical stretching
-
+      hm = 20.0 ! hill height in meters
       str = 1.0  ! no stretching in les case: constant dz
       ! zt = 20000.
       zt = config_ztop
       dz = zt/float(nz1)
 
+      ! Compute average X and Y cell coordinates; domain horizontal centroid
+      xc = 0.0_RKIND
+      yc = 0.0_RKIND
+      x1 = xCell(1)
+      x2 = xCell(1)
+      y1 = yCell(1)
+      y2 = yCell(1)
+      do iCell=1,nCells
+         ! Get the centroid coordinates
+         xc = xc + xCell(iCell)
+         yc = yc + yCell(iCell)
+         ! Get the range of coordinates
+         x1 = min(xCell(iCell), x1)
+         x2 = max(xCell(iCell), x2)
+         y1 = min(xCell(iCell), y1)
+         y2 = max(xCell(iCell), y2)
+      end do
+      xc = xc / nCells
+      yc = yc / nCells
+
+      ! setting for terrain bottom and top surface
+      xla = 0.25 * 0.5 * abs(x2 - x1)
+      yla = 0.25 * 0.5 * abs(y2 - y1)
+      do iCell=1,nCells
+         xi = xCell(iCell)
+         yi = yCell(iCell)
+
+         ! Single cosine squared hump in the center of the domain
+         if ((xi-xc)**2 + (yi-yc)**2 <= (0.5*xla)**2) then
+            hx(1,iCell) = 0.5 * hm * (cos(pii*(xi-xc)/xla)**2. + cos(pii*(yi-yc)/yla)**2.)
+            !print *, xc, yc, xi, yi, hx(1,iCell)
+         else
+            hx(1,iCell) = 0.0
+         end if
+
+         hx(nz,iCell) = zt
+      end do
+
+      !do iCell=1,nCells
+      !  do k=1,nz
+      !    hx(k,iCell) = 0.  ! les on a flat Cartesian plane
+      !  end do
+      !end do
+
+!      write(0,*) ' dz = ',dz
+      call mpas_log_write(' hx computation complete ')
 
       do k=1,nz
 
@@ -6470,8 +6510,13 @@ call mpas_log_write('Done with soil consistency check')
 
       do iCell=1,nCells
         do k=1,nz
-            zgrid(k,iCell) = ah(k)*(zc(k)*(1.-hx(k,iCell)/zt)+hx(k,iCell)) &
+            !zgrid(k,iCell) = ah(k)*(zc(k)*(1.-hx(k,iCell)/zt)+hx(k,iCell)) &
+            !               + (1.-ah(k)) * zc(k)
+            zgrid(k,iCell) = ah(k)*(zc(k)*(1.-hx(1,iCell)/zt)+hx(1,iCell)) &
                            + (1.-ah(k)) * zc(k)
+            !if (k == 1) then
+            !   print *, zgrid(k,iCell)
+            !end if
         end do
         do k=1,nz1
           zz (k,iCell) = (zw(k+1)-zw(k))/(zgrid(k+1,iCell)-zgrid(k,iCell))
@@ -7538,6 +7583,61 @@ call mpas_log_write('Done with soil consistency check')
 
    end subroutine init_atm_case_cam_mpas
 
+   !-----------------------------------------------------------------------
+   !  routine init_atm_grad_zgrid
+   !
+   !> \brief Computes gradients of terrain from zgrid to dzgrid_dx and dzgrid_dy
+   !> \author Jorge Guerra
+   !> \date   11 November 2026
+   !> \details
+   !>  For each target value of zgrid (cell centered), compute the edge values of zgrid_e
+   !>  from the convex hull of zgrid values. With zgrid_e at this cell, compute the line
+   !>  integrals for dzgrid_dx and dzgrid_dy.
+   !>
+   !
+   !-----------------------------------------------------------------------
+   subroutine init_atm_grad_zgrid(mesh)
+      implict none
+
+      type (mpas_pool_type), intent(inout) :: mesh
+      integer, pointer :: nCells, nEdges, nVertLevels
+      integer, dimension(:,:), pointer :: edgesOnCell, cellsOnEdge
+      real (kind=RKIND), dimension(:,:), pointer :: zgrid, dzgrid_dx, dzgrid_dy
+      real (kind=RKIND), dimension(:,:), pointer :: cell_gradient_coef_x, cell_gradient_coef_y
+      real (kind=RKIND), dimension(:), pointer :: dcEdge, dvEdge
+      
+      call mpas_pool_get_dimension(mesh, 'nCells', nCells)
+      call mpas_pool_get_dimension(mesh, 'nEdges', nEdges)
+      call mpas_pool_get_dimension(mesh, 'nVertLevels', nVertLevels)
+      call mpas_pool_get_array(mesh, 'zgrid', zgrid)
+      call mpas_pool_get_array(mesh, 'dzgrid_dx', dzgrid_dx)
+      call mpas_pool_get_array(mesh, 'dzgrid_dy', dzgrid_dy)
+      call mpas_pool_get_array(mesh, 'cell_gradient_coef_x', cell_gradient_coef_x)
+      call mpas_pool_get_array(mesh, 'cell_gradient_coef_y', cell_gradient_coef_y)
+      call mpas_pool_get_array(mesh, 'dvEdge', dvEdge)
+      call mpas_pool_get_array(mesh, 'dcEdge', dcEdge)
+      call mpas_pool_get_array(mesh, 'cellsOnEdge', cellsOnEdge)
+      call mpas_pool_get_array(mesh, 'edgesOnCell', edgesOnCell)
+
+      ! New array resamples zgrid to cell edges
+      real (kind=RKIND), dimension(nVertLevels+1,nEdges) :: zgrid_e
+
+      ! Compute zgrid_e from zgrid data
+
+      ! Loop over all edges
+      do iEdge=1,nEdges
+      ! Get neighbor cell pairs from cellsOnEdge at this edge
+      ! zgrid_e at this edge is the average of zgrid from cell pair
+      end do
+      
+      ! Loop over all cells
+      do iCell=1,nCells
+      ! Get locus of edges for this cell from edgesOnCell
+      ! dzgrid_dx is the weighted line integral as in C.3 in the technical note
+      ! dzgrid_dy is the weighted line integral as in C.4 in the technical note
+      end do
+   
+   end subroutine init_atm_grad_zgrid
 
    integer function nearest_edge(target_lat, target_lon, &
                                  start_edge, &
