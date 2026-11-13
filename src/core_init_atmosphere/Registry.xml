@@ -585,6 +585,8 @@
                         <var name="cf2" packages="vertical_stage_out;met_stage_out"/>
                         <var name="cf3" packages="vertical_stage_out;met_stage_out"/>
                         <var name="zgrid" packages="vertical_stage_out;met_stage_out"/>
+                        <var name="dzgrid_dx" packages="vertical_stage_out;met_stage_out"/>
+                        <var name="dzgrid_dy" packages="vertical_stage_out;met_stage_out"/>
                         <var name="rdzw" packages="vertical_stage_out;met_stage_out"/>
                         <var name="dzu" packages="vertical_stage_out;met_stage_out"/>
                         <var name="rdzu" packages="vertical_stage_out;met_stage_out"/>

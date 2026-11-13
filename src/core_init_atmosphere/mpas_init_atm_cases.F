@@ -6523,6 +6523,9 @@ call mpas_log_write('Done with soil consistency check')
         end do
       end do
 
+      ! Horizontal gradients of zgrid (dzgrid_dx, dzgrid_dy)
+      call init_atm_grad_zgrid(mesh, nCells, nEdges, nVertLevels)
+
       do i=1, nEdges
         iCell1 = cellsOnEdge(1,i)
         iCell2 = cellsOnEdge(2,i)
@@ -7599,24 +7602,23 @@ call mpas_log_write('Done with soil consistency check')
    subroutine init_atm_grad_zgrid(mesh, nCells, nEdges, nVertLevels)
       implicit none
 
-      integer :: iCell, iEdge
+      integer :: iCell, iEdge, i, k, cell1, cell2
       integer, intent(in) :: nCells, nEdges
       integer, intent(in) :: nVertLevels
       type (mpas_pool_type), intent(inout) :: mesh
+      integer, dimension(:), pointer :: nEdgesOnCell
       integer, dimension(:,:), pointer :: edgesOnCell, cellsOnEdge
       real (kind=RKIND), dimension(:,:), pointer :: zgrid, dzgrid_dx, dzgrid_dy
       real (kind=RKIND), dimension(:,:), pointer :: cell_gradient_coef_x, cell_gradient_coef_y
-      real (kind=RKIND), dimension(:), pointer :: dcEdge, dvEdge
       ! New array resamples zgrid to cell edges
       real (kind=RKIND), dimension(nVertLevels+1,nEdges) :: zgrid_e
-      
+
       call mpas_pool_get_array(mesh, 'zgrid', zgrid)
       call mpas_pool_get_array(mesh, 'dzgrid_dx', dzgrid_dx)
       call mpas_pool_get_array(mesh, 'dzgrid_dy', dzgrid_dy)
       call mpas_pool_get_array(mesh, 'cell_gradient_coef_x', cell_gradient_coef_x)
       call mpas_pool_get_array(mesh, 'cell_gradient_coef_y', cell_gradient_coef_y)
-      call mpas_pool_get_array(mesh, 'dvEdge', dvEdge)
-      call mpas_pool_get_array(mesh, 'dcEdge', dcEdge)
+      call mpas_pool_get_array(mesh, 'nEdgesOnCell', nEdgesOnCell)
       call mpas_pool_get_array(mesh, 'cellsOnEdge', cellsOnEdge)
       call mpas_pool_get_array(mesh, 'edgesOnCell', edgesOnCell)
 
@@ -7625,14 +7627,31 @@ call mpas_log_write('Done with soil consistency check')
       ! Loop over all edges
       do iEdge=1,nEdges
       ! Get neighbor cell pairs from cellsOnEdge at this edge
+         cell1 = cellsOnEdge(1,iEdge)
+         cell2 = cellsOnEdge(2,iEdge)
+         ! Fall back to the valid cell if a neighbor lies outside the cell range
+         if (cell1 < 1 .or. cell1 > nCells) cell1 = cell2
+         if (cell2 < 1 .or. cell2 > nCells) cell2 = cell1
       ! zgrid_e at this edge is the average of zgrid from cell pair
+         do k=1,nVertLevels+1
+            zgrid_e(k,iEdge) = 0.5_RKIND * (zgrid(k,cell1) + zgrid(k,cell2))
+         end do
       end do
-      
+
       ! Loop over all cells
       do iCell=1,nCells
+         dzgrid_dx(:,iCell) = 0.0_RKIND
+         dzgrid_dy(:,iCell) = 0.0_RKIND
       ! Get locus of edges for this cell from edgesOnCell
+         do i=1,nEdgesOnCell(iCell)
+            iEdge = edgesOnCell(i,iCell)
       ! dzgrid_dx is the weighted line integral as in C.3 in the technical note
       ! dzgrid_dy is the weighted line integral as in C.4 in the technical note
+            do k=1,nVertLevels+1
+               dzgrid_dx(k,iCell) = dzgrid_dx(k,iCell) + cell_gradient_coef_x(i,iCell) * zgrid_e(k,iEdge)
+               dzgrid_dy(k,iCell) = dzgrid_dy(k,iCell) + cell_gradient_coef_y(i,iCell) * zgrid_e(k,iEdge)
+            end do
+         end do
       end do
    
    end subroutine init_atm_grad_zgrid
