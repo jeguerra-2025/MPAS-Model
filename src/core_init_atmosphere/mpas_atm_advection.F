@@ -778,8 +778,13 @@ module atm_advection
       integer :: iv
       logical :: do_the_cell
       real (kind=RKIND) :: area_cell, dx, dy
+      logical, pointer :: is_periodic
+      real (kind=RKIND), pointer :: x_period, y_period
 
 
+      call mpas_pool_get_config(mesh, 'is_periodic', is_periodic)
+      call mpas_pool_get_config(mesh, 'x_period', x_period)
+      call mpas_pool_get_config(mesh, 'y_period', y_period)
       call mpas_pool_get_array(mesh, 'cell_gradient_coef_x', cell_gradient_coef_x)
       call mpas_pool_get_array(mesh, 'cell_gradient_coef_y', cell_gradient_coef_y)
       call mpas_pool_get_array(mesh, 'nEdgesOnCell', nEdgesOnCell)
@@ -884,13 +889,18 @@ module atm_advection
 
             theta_abs(iCell) = 0.0
 
-            xp(1) = xCell(iCell)
-            yp(1) = yCell(iCell)
+            ! xp and yp are the cell's vertex points relative to the cell center (0,0),
+            ! matching the layout of the sphere branch above: xp(1..n-1) are the vertices.
+            ! On periodic meshes, vertices stored across the domain are brought next to the cell.
 
-            do i=2,n
-               iv = verticesOnCell(i-1,iCell)
-               xp(i) = xVertex(iv)
-               yp(i) = yVertex(iv)
+            do i=1,n-1
+               iv = verticesOnCell(i,iCell)
+               xp(i) = xVertex(iv) - xCell(iCell)
+               yp(i) = yVertex(iv) - yCell(iCell)
+               if (is_periodic) then
+                  if (x_period > 0.0_RKIND) xp(i) = xp(i) - x_period * real(nint(xp(i) / x_period), RKIND)
+                  if (y_period > 0.0_RKIND) yp(i) = yp(i) - y_period * real(nint(yp(i) / y_period), RKIND)
+               end if
             end do
 
          end if
