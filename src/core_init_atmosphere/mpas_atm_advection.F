@@ -893,17 +893,18 @@ module atm_advection
             !xp(1) = xCell(iCell)
             !yp(1) = yCell(iCell)
 
+            ! xp and yp are the cell's vertex points relative to the cell center (0,0),
+            ! matching the layout of the sphere branch above. Centering keeps the
+            ! shoelace area sum free of large-coordinate round-off in R4 builds.
             ! On periodic meshes, vertices stored across the domain are shifted by
             ! a whole number of periods to the image nearest the cell center.
             do i=1,nEdgesOnCell0
                iv = verticesOnCell(i,iCell)
-               xp(i) = xVertex(iv)
-               yp(i) = yVertex(iv)
+               xp(i) = xVertex(iv) - xCell(iCell)
+               yp(i) = yVertex(iv) - yCell(iCell)
                if (is_periodic) then
-                  if (x_period > 0.0_RKIND) &
-                     xp(i) = xp(i) - x_period * real(nint((xp(i) - xCell(iCell)) / x_period), RKIND)
-                  if (y_period > 0.0_RKIND) &
-                     yp(i) = yp(i) - y_period * real(nint((yp(i) - yCell(iCell)) / y_period), RKIND)
+                  if (x_period > 0.0_RKIND) xp(i) = xp(i) - x_period * real(nint(xp(i) / x_period), RKIND)
+                  if (y_period > 0.0_RKIND) yp(i) = yp(i) - y_period * real(nint(yp(i) / y_period), RKIND)
                end if
             end do
 
