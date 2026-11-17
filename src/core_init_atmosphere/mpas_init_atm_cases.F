@@ -6268,6 +6268,9 @@ call mpas_log_write('Done with soil consistency check')
       real (kind=RKIND) ::  xnutr
       real (kind=RKIND) ::  ztemp, zd, zt, dz, str
       real (kind=RKIND) ::  hm, xla, yla, xi, yi, x1, x2, y1, y2, xc, yc
+      real (kind=R8KIND) :: loc_xa, loc_ya, loc_a   ! R8 to avoid R4 accumulation error
+      real (kind=RKIND) ::  glb_xa, glb_ya, glb_a
+      real (kind=RKIND) ::  loc_x1, loc_x2, loc_y1, loc_y2
 
       real (kind=RKIND), dimension(nVertLevels ) :: qvb, qvp, zg
       real (kind=RKIND), dimension(nVertLevels ) :: t_init_1d
@@ -6424,25 +6427,39 @@ call mpas_log_write('Done with soil consistency check')
       zt = config_ztop
       dz = zt/float(nz1)
 
-      ! Compute average X and Y cell coordinates; domain horizontal centroid
-      xc = 0.0_RKIND
-      yc = 0.0_RKIND
-      x1 = xCell(1)
-      x2 = xCell(1)
-      y1 = yCell(1)
-      y2 = yCell(1)
-      do iCell=1,nCells
-         ! Get the centroid coordinates
-         xc = xc + xCell(iCell)
-         yc = yc + yCell(iCell)
-         ! Get the range of coordinates
-         x1 = min(xCell(iCell), x1)
-         x2 = max(xCell(iCell), x2)
-         y1 = min(xCell(iCell), y1)
-         y2 = max(xCell(iCell), y2)
+      ! Global (all MPI tasks) area-weighted horizontal centroid and extent of
+      ! the domain. Only owned cells (1:nCellsSolve) enter the local partial
+      ! sums so that halo cells are not double counted; the partial results are
+      ! then reduced across tasks so every task sees identical xc, yc, x1..y2
+      ! regardless of the decomposition (-np N).
+      loc_xa = 0.0_R8KIND
+      loc_ya = 0.0_R8KIND
+      loc_a  = 0.0_R8KIND
+      loc_x1 =  huge(1.0_RKIND)
+      loc_x2 = -huge(1.0_RKIND)
+      loc_y1 =  huge(1.0_RKIND)
+      loc_y2 = -huge(1.0_RKIND)
+      do iCell=1,nCellsSolve
+         loc_xa = loc_xa + real(areaCell(iCell), R8KIND) * real(xCell(iCell), R8KIND)
+         loc_ya = loc_ya + real(areaCell(iCell), R8KIND) * real(yCell(iCell), R8KIND)
+         loc_a  = loc_a  + real(areaCell(iCell), R8KIND)
+         loc_x1 = min(xCell(iCell), loc_x1)
+         loc_x2 = max(xCell(iCell), loc_x2)
+         loc_y1 = min(yCell(iCell), loc_y1)
+         loc_y2 = max(yCell(iCell), loc_y2)
       end do
-      xc = xc / nCells
-      yc = yc / nCells
+      call mpas_dmpar_sum_real(dminfo, real(loc_xa, RKIND), glb_xa)
+      call mpas_dmpar_sum_real(dminfo, real(loc_ya, RKIND), glb_ya)
+      call mpas_dmpar_sum_real(dminfo, real(loc_a,  RKIND), glb_a)
+      call mpas_dmpar_min_real(dminfo, loc_x1, x1)
+      call mpas_dmpar_max_real(dminfo, loc_x2, x2)
+      call mpas_dmpar_min_real(dminfo, loc_y1, y1)
+      call mpas_dmpar_max_real(dminfo, loc_y2, y2)
+      xc = glb_xa / glb_a
+      yc = glb_ya / glb_a
+      call mpas_log_write(' les terrain: global centroid xc, yc = $r $r', realArgs=(/xc, yc/))
+      call mpas_log_write(' les terrain: global extent x1, x2, y1, y2 = $r $r $r $r', &
+                          realArgs=(/x1, x2, y1, y2/))
 
       ! setting for terrain bottom and top surface
       xla = 0.25 * 0.5 * abs(x2 - x1)
