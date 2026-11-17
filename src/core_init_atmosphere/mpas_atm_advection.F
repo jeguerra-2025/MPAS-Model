@@ -778,8 +778,13 @@ module atm_advection
       integer :: iv
       logical :: do_the_cell
       real (kind=RKIND) :: area_cell, dx, dy
+      logical, pointer :: is_periodic
+      real (kind=RKIND), pointer :: x_period, y_period
 
 
+      call mpas_pool_get_config(mesh, 'is_periodic', is_periodic)
+      call mpas_pool_get_config(mesh, 'x_period', x_period)
+      call mpas_pool_get_config(mesh, 'y_period', y_period)
       call mpas_pool_get_array(mesh, 'cell_gradient_coef_x', cell_gradient_coef_x)
       call mpas_pool_get_array(mesh, 'cell_gradient_coef_y', cell_gradient_coef_y)
       call mpas_pool_get_array(mesh, 'nEdgesOnCell', nEdgesOnCell)
@@ -888,10 +893,18 @@ module atm_advection
             !xp(1) = xCell(iCell)
             !yp(1) = yCell(iCell)
 
+            ! On periodic meshes, vertices stored across the domain are shifted by
+            ! a whole number of periods to the image nearest the cell center.
             do i=1,nEdgesOnCell0
                iv = verticesOnCell(i,iCell)
                xp(i) = xVertex(iv)
                yp(i) = yVertex(iv)
+               if (is_periodic) then
+                  if (x_period > 0.0_RKIND) &
+                     xp(i) = xp(i) - x_period * real(nint((xp(i) - xCell(iCell)) / x_period), RKIND)
+                  if (y_period > 0.0_RKIND) &
+                     yp(i) = yp(i) - y_period * real(nint((yp(i) - yCell(iCell)) / y_period), RKIND)
+               end if
             end do
 
          end if
