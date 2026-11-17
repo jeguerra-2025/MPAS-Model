@@ -767,7 +767,7 @@ module atm_advection
       real (kind=RKIND), dimension(25) :: xc, yc, zc ! cell center coordinates
       real (kind=RKIND), dimension(25) :: thetav, thetat, dl_sphere
       real (kind=RKIND) :: dl
-      integer :: i, ip1, ip2, n
+      integer :: i, ip1, ip2, nEdgesOnCell0, nEdgesOnCellP1
       integer :: iCell
       real (kind=RKIND) :: pii
       real (kind=RKIND), dimension(25) :: xp, yp
@@ -805,12 +805,13 @@ module atm_advection
          do i=2,nEdgesOnCell(iCell)+1
             cell_list(i) = cellsOnCell(i-1,iCell)
          end do
-         n = nEdgesOnCell(iCell) + 1
+         nEdgesOnCell0 = nEdgesOnCell(iCell)
+         nEdgesOnCellP1 = nEdgesOnCell(iCell) + 1
 
 !  check to see if we are reaching outside the halo
 
          do_the_cell = .true.
-         do i=1,n
+         do i=1,nEdgesOnCellP1
             if (cell_list(i) > nCells) do_the_cell = .false.
          end do
 
@@ -828,7 +829,7 @@ module atm_advection
             yc(1) = yCell(iCell)/sphere_radius
             zc(1) = zCell(iCell)/sphere_radius
 
-            do i=2,n
+            do i=2,nEdgesOnCellP1
                iv = verticesOnCell(i-1,iCell)
                xc(i) = xVertex(iv)/sphere_radius
                yc(i) = yVertex(iv)/sphere_radius
@@ -860,10 +861,10 @@ module atm_advection
             ! to the sphere vertex points for the cell.
 
             thetat(1) = theta_abs(iCell)
-            do i=1,n-1
+            do i=1,nEdgesOnCell0
    
                ip2 = i+2
-               if (ip2 > n) ip2 = 2
+               if (ip2 > nEdgesOnCellP1) ip2 = 2
     
                thetav(i) = sphere_angle( xc(1),   yc(1),   zc(1),    &
                                          xc(i+1), yc(i+1), zc(i+1),  &
@@ -875,7 +876,7 @@ module atm_advection
 
             ! xp and yp are the tangent-plane vertex points with the cell center at (0,0)
 
-            do i=1,n-1
+            do i=1,nEdgesOnCell0
                xp(i) = cos(thetat(i)) * dl_sphere(i)
                yp(i) = sin(thetat(i)) * dl_sphere(i)
             end do
@@ -884,11 +885,11 @@ module atm_advection
 
             theta_abs(iCell) = 0.0
 
-            xp(1) = xCell(iCell)
-            yp(1) = yCell(iCell)
+            !xp(1) = xCell(iCell)
+            !yp(1) = yCell(iCell)
 
-            do i=2,n
-               iv = verticesOnCell(i-1,iCell)
+            do i=1,nEdgesOnCell0
+               iv = verticesOnCell(i,iCell)
                xp(i) = xVertex(iv)
                yp(i) = yVertex(iv)
             end do
@@ -899,9 +900,9 @@ module atm_advection
          ! (2) compute angle of cell edge normal vector.  here we are repurposing thetat
 
          area_cell = 0.
-         do i=1,n-1
+         do i=1,nEdgesOnCell0
             ip1 = i+1
-            if (ip1 == n) ip1 = 1
+            if (ip1 == nEdgesOnCellP1) ip1 = 1
             dx = xp(ip1)-xp(i)
             dy = yp(ip1)-yp(i)
             area_cell = area_cell + 0.25*(xp(i)+xp(ip1))*(yp(ip1)-yp(i)) - 0.25*(yp(i)+yp(ip1))*(xp(ip1)-xp(i))
@@ -910,9 +911,9 @@ module atm_advection
 
          ! coefficients - see documentation for the formulas.
 
-         do i=1,n-1
+         do i=1,nEdgesOnCell0
             ip1 = i+1
-            if (ip1 == n) ip1 = 1
+            if (ip1 == nEdgesOnCellP1) ip1 = 1
             dl = sqrt((xp(ip1)-xp(i))**2 + (yp(ip1)-yp(i))**2)
             cell_gradient_coef_x(i,iCell) = dl*cos(thetat(i))/area_cell
             cell_gradient_coef_y(i,iCell) = dl*sin(thetat(i))/area_cell
