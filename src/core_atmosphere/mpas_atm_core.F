@@ -18,10 +18,6 @@ module atm_core
 
    type (MPAS_Clock_type), pointer :: clock
 
-   integer, parameter :: LES_MODEL_NONE = 0, &
-                         LES_MODEL_3D_SMAGORINSKY = 1, &
-                         LES_MODEL_PROGNOSTIC_15_ORDER = 2
-
    contains
 
 
@@ -373,7 +369,7 @@ module atm_core
       use mpas_vector_reconstruction
       use mpas_stream_manager
       use mpas_atm_boundaries, only : mpas_atm_setup_bdy_masks
-      use mpas_atm_dissipation_models, only : les_model_from_string
+      use mpas_atm_dissipation_models, only : les_model_from_string, LES_MODEL_NONE
 #ifdef DO_PHYSICS
 !     use mpas_atmphys_aquaplanet
       use mpas_atmphys_control
@@ -485,13 +481,6 @@ module atm_core
       call mpas_pool_get_config(mesh, 'sphere_radius', sphere_radius)
       call atm_initialize_deformation_weights(mesh, nCells, on_a_sphere, sphere_radius)
 
-      !call mpas_pool_get_config(configs, 'config_les_model', config_les_model)
-      call mpas_pool_get_config(block % configs, 'config_les_model', config_les_model)
-      les_model_opt = les_model_from_string(config_les_model)
-      if ( les_model_opt /= LES_MODEL_NONE ) then
-         call atm_initialize_grad_zgrid(mesh, nCells, nEdges, nVertLevels)
-      end if
-
       call atm_adv_coef_compression(mesh)
 
       call atm_couple_coef_3rd_order(mesh, block % configs)
@@ -501,6 +490,13 @@ module atm_core
 
       nVertices = nVertices_ptr
       nVertLevels = nVertLevels_ptr
+
+      !call mpas_pool_get_config(configs, 'config_les_model', config_les_model)
+      call mpas_pool_get_config(block % configs, 'config_les_model', config_les_model)
+      les_model_opt = les_model_from_string(config_les_model)
+      if ( les_model_opt /= LES_MODEL_NONE ) then
+         call atm_initialize_grad_zgrid(mesh, nCells, nEdges, nVertLevels)
+      end if
 
       allocate(ke_vertex(nVertLevels,nVertices+1))  ! ke_vertex is a module variable defined in mpas_atm_time_integration.F
       allocate(ke_edge(nVertLevels,nEdges+1))       ! ke_edge is a module variable defined in mpas_atm_time_integration.F
@@ -1922,11 +1918,18 @@ module atm_core
       ! Get locus of edges for this cell from edgesOnCell
          do i=1,nEdgesOnCell(iCell)
             iEdge = edgesOnCell(i,iCell)
+            ! Outermost halo cells reference edges outside the block (iEdge = nEdges+1).
+            ! Their deformation coefficients are zero, so skipping these edges leaves
+            ! dzgrid = 0 there and avoids reading past the end of zgrid_e.
+            if (iEdge < 1 .or. iEdge > nEdges) cycle
       ! dzgrid_dx is the weighted line integral as in C.3 in the technical note
       ! dzgrid_dy is the weighted line integral as in C.4 in the technical note
+      ! The cell value is subtracted from each edge value. The coefficients of a closed
+      ! cell sum to zero, so the gradient is unchanged, but the large common height
+      ! (up to ztop) no longer cancels in the sum, removing R4 round-off on flat levels.
             do k=1,nVertLevels+1
-               dzgrid_dx(k,iCell) = dzgrid_dx(k,iCell) + deformation_coef_c(i,iCell) * zgrid_e(k,iEdge)
-               dzgrid_dy(k,iCell) = dzgrid_dy(k,iCell) + deformation_coef_s(i,iCell) * zgrid_e(k,iEdge)
+               dzgrid_dx(k,iCell) = dzgrid_dx(k,iCell) + deformation_coef_c(i,iCell) * (zgrid_e(k,iEdge) - zgrid(k,iCell))
+               dzgrid_dy(k,iCell) = dzgrid_dy(k,iCell) + deformation_coef_s(i,iCell) * (zgrid_e(k,iEdge) - zgrid(k,iCell))
             end do
          end do
       end do

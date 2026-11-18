@@ -585,8 +585,6 @@
                         <var name="cf2" packages="vertical_stage_out;met_stage_out"/>
                         <var name="cf3" packages="vertical_stage_out;met_stage_out"/>
                         <var name="zgrid" packages="vertical_stage_out;met_stage_out"/>
-                        <var name="dzgrid_dx" packages="vertical_stage_out;met_stage_out"/>
-                        <var name="dzgrid_dy" packages="vertical_stage_out;met_stage_out"/>
                         <var name="rdzw" packages="vertical_stage_out;met_stage_out"/>
                         <var name="dzu" packages="vertical_stage_out;met_stage_out"/>
                         <var name="rdzu" packages="vertical_stage_out;met_stage_out"/>
@@ -1044,14 +1042,6 @@
 
                 <var name="zgrid" type="real" dimensions="nVertLevelsP1 nCells" units="m MSL"
                      description="Geometric height of layer interfaces"
-                     packages="vertical_stage_out;met_stage_out"/>
-
-               <var name="dzgrid_dx" type="real" dimensions="nVertLevelsP1 nCells" units="unitless"
-                     description="X component of gradient of geometric height layer interfaces"
-                     packages="vertical_stage_out;met_stage_out"/>
-
-               <var name="dzgrid_dy" type="real" dimensions="nVertLevelsP1 nCells" units="unitless"
-                     description="Y component of gradient of geometric height layer interfaces"
                      packages="vertical_stage_out;met_stage_out"/>
 
                 <var name="rdzw" type="real" dimensions="nVertLevels" units="unitless"

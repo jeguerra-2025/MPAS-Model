@@ -967,6 +967,8 @@
 			<var name="kiteAreasOnVertex"/>
 			<var name="meshDensity"/>
 			<var name="zgrid"/>
+			<var name="dzgrid_dx" packages="les"/>
+			<var name="dzgrid_dy" packages="les"/>
 			<var name="fzm"/>
 			<var name="fzp"/>
 			<var name="zz"/>
@@ -1530,10 +1532,12 @@
                      description="Geometric height of layer interfaces"/>
 
                 <var name="dzgrid_dx" type="real" dimensions="nVertLevelsP1 nCells" units="unitless"
-                     description="X component of gradient of geometric height layer interfaces"/>
+                     description="X component of gradient of geometric height layer interfaces"
+                     packages="les"/>
 
                 <var name="dzgrid_dy" type="real" dimensions="nVertLevelsP1 nCells" units="unitless"
-                     description="Y component of gradient of geometric height layer interfaces"/>
+                     description="Y component of gradient of geometric height layer interfaces"
+                     packages="les"/>
 
                 <var name="rdzw" type="real" dimensions="nVertLevels" units="unitless"
                      description="Reciprocal dzw"/>
