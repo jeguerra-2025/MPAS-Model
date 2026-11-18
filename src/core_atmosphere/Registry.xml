@@ -1529,6 +1529,12 @@
                 <var name="zgrid" type="real" dimensions="nVertLevelsP1 nCells" units="m MSL"
                      description="Geometric height of layer interfaces"/>
 
+                <var name="dzgrid_dx" type="real" dimensions="nVertLevelsP1 nCells" units="unitless"
+                     description="X component of gradient of geometric height layer interfaces"/>
+
+                <var name="dzgrid_dy" type="real" dimensions="nVertLevelsP1 nCells" units="unitless"
+                     description="Y component of gradient of geometric height layer interfaces"/>
+
                 <var name="rdzw" type="real" dimensions="nVertLevels" units="unitless"
                      description="Reciprocal dzw"/>
 
